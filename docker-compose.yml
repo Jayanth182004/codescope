@@ -1,37 +1,82 @@
-version: '3.8'
-
 services:
+  # ── PostgreSQL — primary relational database ───────────────────────────────
   db:
     image: postgres:15-alpine
     container_name: codescope_db
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: codescope_user
-      POSTGRES_PASSWORD: codescope_secure_pass_387
-      POSTGRES_DB: codescope_dev
+      POSTGRES_USER: ${POSTGRES_USER:-codescope_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codescope_secure_pass_387}
+      POSTGRES_DB: ${POSTGRES_DB:-codescope_dev}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U codescope_user -d codescope_dev"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codescope_user} -d ${POSTGRES_DB:-codescope_dev}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # ── Neo4j 5 Community — knowledge graph database ──────────────────────────
+  neo4j:
+    image: neo4j:5.19-community
+    container_name: codescope_neo4j
+    environment:
+      # Disable anonymous access; credentials set via NEO4J_AUTH=username/password
+      NEO4J_AUTH: ${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:-codescope_neo4j_pass}
+      # Memory tuning — adjust for production deployments
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512m
+      # Allow Bolt connections from backend container
+      NEO4J_server_bolt_advertised__address: neo4j:7687
+      NEO4J_server_http_advertised__address: neo4j:7474
+    ports:
+      - "7474:7474"   # Neo4j Browser UI
+      - "7687:7687"   # Bolt protocol (driver connection)
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── FastAPI backend ────────────────────────────────────────────────────────
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: codescope_backend
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql://codescope_user:codescope_secure_pass_387@db:5432/codescope_dev
-      - SECRET_KEY=codescope_super_secret_signing_key_387d89f2e3c09b7
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-codescope_user}:${POSTGRES_PASSWORD:-codescope_secure_pass_387}@db:5432/${POSTGRES_DB:-codescope_dev}
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USERNAME=${NEO4J_USERNAME:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-codescope_neo4j_pass}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
+      - SECRET_KEY=${SECRET_KEY:-codescope_super_secret_signing_key_387d89f2e3c09b7}
+      - UPLOAD_DIR=/data/uploads
+      - MAX_ZIP_SIZE_BYTES=104857600
+      - MAX_EXTRACTED_SIZE_BYTES=524288000
+      - MAX_ANALYSIS_FILES=50000
+      - MAX_ANALYZED_FILE_SIZE_BYTES=5242880
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    volumes:
+      - repository_uploads:/data/uploads
 
+  # ── React / Vite frontend ─────────────────────────────────────────────────
   frontend:
     build:
       context: .
@@ -44,3 +89,6 @@ services:
 
 volumes:
   postgres_data:
+  neo4j_data:
+  neo4j_logs:
+  repository_uploads:
