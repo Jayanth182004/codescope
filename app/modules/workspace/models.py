@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from sqlalchemy import Column, String, DateTime, ForeignKey, Table
 from sqlalchemy.orm import relationship
 from app.database.session import Base
@@ -18,7 +18,7 @@ class Workspace(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     avatar = Column(String, nullable=True) # visual initials, e.g. 'NP'
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     
     # Relationships
     members = relationship(

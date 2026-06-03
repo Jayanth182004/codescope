@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.modules.auth.models import User, Session as UserSession
@@ -46,7 +46,7 @@ class SessionRepository:
     @staticmethod
     def create_session(db: Session, user_id: str, refresh_token: str) -> UserSession:
         session_id = str(uuid.uuid4())
-        expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expires_at = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
         db_session = UserSession(
             id=session_id,
             user_id=user_id,
