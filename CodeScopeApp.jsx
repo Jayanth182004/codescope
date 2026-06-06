@@ -1,199 +1,78 @@
-import { useState, useEffect, useRef, createContext, useContext } from "react";
-import { ReactFlow, ReactFlowProvider, useReactFlow, MiniMap, Controls, Background, useNodesState, useEdgesState, MarkerType, Handle, Position } from '@xyflow/react';
+import { useState, useEffect, useRef } from "react";
+import axios from "axios";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { create } from "zustand";
+import { ReactFlow, ReactFlowProvider, useReactFlow, MiniMap, Controls, Background, useNodesState, useEdgesState, MarkerType, Handle, Position, BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { NAV_ITEMS, PAGE_META, dashboardData } from "./src/app/appConfig.jsx";
+import { architectureMockData } from "./src/features/architecture/architectureData.js";
+import { dependencyMockData, dependencyTree } from "./src/features/dependencies/dependencyData.js";
+import { gitMockData } from "./src/features/git/gitData.js";
+import { impactMockData, impactTargets, impactHistory } from "./src/features/impact/impactData.js";
+import { DashButton, Pill, ProgressBar, WidgetShell, MetricCard } from "./src/ui/dashboardPrimitives.jsx";
+import { T, Icons, GLOBAL_CSS } from "./src/ui/foundation.jsx";
 
-/* ─── DESIGN TOKENS ─────────────────────────────────────────────────────────
-   Dark shell: near-black base, subtle zinc surfaces, single teal accent.
-   Typography: Inter for UI, JetBrains Mono for code/data moments.
-   Mirrors the landing page accent (#2B5C52) but on a dark ground.
-──────────────────────────────────────────────────────────────────────────── */
-const T = {
-  /* Backgrounds */
-  bg:        "#0D0E0F",   /* page base — near-black with warm undertone */
-  surface:   "#141516",   /* sidebar, cards */
-  surfaceEl: "#1A1B1D",   /* elevated panels */
-  surfaceHov:"#1F2022",   /* hover state */
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1";
+const apiClient = axios.create({ baseURL: API_BASE_URL, timeout: 30000 });
 
-  /* Borders */
-  border:    "rgba(255,255,255,0.07)",
-  borderMid: "rgba(255,255,255,0.11)",
+apiClient.interceptors.request.use(config => {
+  const token = localStorage.getItem("codescope_access_token") || localStorage.getItem("access_token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
-  /* Text */
-  text:      "#F0EFEC",   /* primary */
-  dim:       "rgba(240,239,236,0.60)",
-  faint:     "rgba(240,239,236,0.35)",
-
-  /* Accent — deep teal from landing, brightened for dark bg */
-  accent:    "#3D8B7A",
-  accentBright: "#4EADA0",
-  accentSoft:"rgba(61,139,122,0.12)",
-  accentBorder:"rgba(61,139,122,0.30)",
-
-  /* Semantic */
-  success:   "#3FB950",
-  warning:   "#D29922",
-  error:     "#F85149",
-  info:      "#58A6FF",
-
-  /* Type */
-  sans:  "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-  mono:  "'JetBrains Mono', 'SF Mono', ui-monospace, monospace",
-
-  /* Radius */
-  r4:  "4px",
-  r6:  "6px",
-  r8:  "8px",
-  r12: "12px",
-
-  /* Shadow */
-  shadow:    "0 4px 24px rgba(0,0,0,0.5)",
-  shadowLg:  "0 8px 48px rgba(0,0,0,0.65)",
+const readEnvelope = response => response.data?.data ?? response.data;
+const friendlyApiError = error => {
+  const status = error?.response?.status;
+  const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message;
+  if (status === 401) return "Please sign in before running repository analysis.";
+  if (status === 403) return "You do not have permission to analyze this repository.";
+  if (status === 404) return "Repository analysis data was not found. Run analysis first.";
+  if (status === 409) return "An analysis run is already active or cannot be started yet.";
+  if (status === 422) return "This repository cannot be analyzed yet. Upload a ZIP repository first.";
+  if (!error?.response) return "Network error. Confirm the backend is running and retry.";
+  return detail || "Unable to load repository analysis.";
 };
 
-/* ─── APP CONTEXT ────────────────────────────────────────────────────────── */
-const AppCtx = createContext(null);
-function useApp() { return useContext(AppCtx); }
-
-/* ─── ICONS (inline SVG, no dependency) ─────────────────────────────────── */
-const Icon = ({ d, size = 16, stroke = T.faint, fill = "none", strokeWidth = 1.5 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-    <path d={d} />
-  </svg>
-);
-
-const Icons = {
-  alertTriangle: () => <Icon d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />,
-  upload: () => <Icon d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />,
-  gitBranch: () => <Icon d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9" />,
-  star: () => <Icon d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />,
-  starFilled: () => <Icon d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#D29922" stroke="#D29922" />,
-  moreH: () => <Icon d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth={2.5} />,
-  link: () => <Icon d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />,
-  file: () => <Icon d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6" />,
-  database: () => <Icon d="M12 3c4.42 0 8 1.34 8 3s-3.58 3-8 3-8-1.34-8-3 3.58-3 8-3zM4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />,
-  trash: () => <Icon d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />,
-  gridView: () => <Icon d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />,
-  listView: () => <Icon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
-  archive: () => <Icon d="M21 8v13H3V8M1 3h22v5H1zM10 12h4" />,
-  logo: () => (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <rect x="1" y="1" width="18" height="18" rx="4" stroke={T.accent} strokeWidth="1.2"/>
-      <path d="M5 10h10M10 5v10" stroke={T.accent} strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  ),
-  logoSm: () => (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-      <rect x="1" y="1" width="18" height="18" rx="4" stroke={T.accent} strokeWidth="1.2"/>
-      <path d="M5 10h10M10 5v10" stroke={T.accent} strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  ),
-  dashboard:    () => <Icon d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />,
-  projects:     () => <Icon d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />,
-  repos:        () => <Icon d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />,
-  arch:         () => <Icon d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />,
-  deps:         () => <Icon d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2zM5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />,
-  git:          () => <Icon d="M18 3a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3zM6 21a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3zM6 3a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3z" fill="none" />,
-  impact:       () => <Icon d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />,
-  error:        () => <Icon d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" />,
-  ai:           () => <Icon d="M12 8V4H8M12 8h4M12 8v4M8 12H4v4h4v-4zM20 12h-4v4h4v-4zM8 4H4v4h4V4zM20 4h-4v4h4V4z" />,
-  settings:     () => <Icon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />,
-  logout:       () => <Icon d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />,
-  search:       () => <Icon d="M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" />,
-  bell:         () => <Icon d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />,
-  chevronDown:  () => <Icon d="M6 9l6 6 6-6" />,
-  chevronRight: () => <Icon d="M9 18l6-6-6-6" />,
-  menu:         () => <Icon d="M3 12h18M3 6h18M3 18h18" />,
-  eye:          () => <Icon d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />,
-  eyeOff:       () => <Icon d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22" />,
-  github:       () => <Icon d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />,
-  google:       () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M20.283 10.356h-8.327v3.451h4.792c-.446 2.193-2.313 3.453-4.792 3.453a5.27 5.27 0 0 1-5.279-5.28 5.27 5.27 0 0 1 5.279-5.279c1.259 0 2.397.447 3.29 1.178l2.6-2.599c-1.584-1.381-3.615-2.233-5.89-2.233a8.908 8.908 0 0 0-8.934 8.934 8.907 8.907 0 0 0 8.934 8.934c4.467 0 8.529-3.249 8.529-8.934 0-.528-.081-1.097-.202-1.625z" fill={T.dim} />
-    </svg>
-  ),
-  check:        () => <Icon d="M20 6L9 17l-5-5" stroke={T.success} />,
-  workspace:    () => <Icon d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
-  repo:         () => <Icon d="M3 3h18v18H3zM9 3v18M3 9h6M3 15h6" />,
-  user:         () => <Icon d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />,
-  sun:          () => <Icon d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42M12 5a7 7 0 1 0 0 14A7 7 0 0 0 12 5z" />,
-  moon:         () => <Icon d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />,
-  x:            () => <Icon d="M18 6L6 18M6 6l12 12" />,
+const analysisApi = {
+  start: repositoryId => apiClient.post(`/analysis/start/${repositoryId}`).then(readEnvelope),
+  report: repositoryId => apiClient.get(`/analysis/${repositoryId}`).then(readEnvelope),
+  status: repositoryId => apiClient.get("/analysis/status", { params: { repository_id: repositoryId } }).then(readEnvelope),
+  metrics: repositoryId => apiClient.get("/analysis/metrics", { params: { repository_id: repositoryId } }).then(readEnvelope),
+  files: (repositoryId, params = {}) => apiClient.get("/analysis/files", { params: { repository_id: repositoryId, ...params } }).then(readEnvelope),
+  functions: (repositoryId, params = {}) => apiClient.get("/analysis/functions", { params: { repository_id: repositoryId, ...params } }).then(readEnvelope),
+  classes: (repositoryId, params = {}) => apiClient.get("/analysis/classes", { params: { repository_id: repositoryId, ...params } }).then(readEnvelope),
+  modules: (repositoryId, params = {}) => apiClient.get("/analysis/modules", { params: { repository_id: repositoryId, ...params } }).then(readEnvelope),
+  imports: (repositoryId, params = {}) => apiClient.get("/analysis/imports", { params: { repository_id: repositoryId, ...params } }).then(readEnvelope),
 };
 
-/* ─── KEYFRAMES ──────────────────────────────────────────────────────────── */
-const GLOBAL_CSS = `
-.tree-node-hover:hover { background: rgba(255,255,255,0.04) !important; }
-.list-row-hover:hover { background: rgba(255,255,255,0.02) !important; }
-.hover-text:hover { color: #fff !important; }
+const useCodeScopeUiStore = create(set => ({
+  selectedRepositoryId: localStorage.getItem("codescope_selected_repository_id") || "r1",
+  selectedRepositoryName: localStorage.getItem("codescope_selected_repository_name") || "main-api",
+  setSelectedRepository: repository => {
+    const id = repository?.id || "r1";
+    const name = repository?.name || "main-api";
+    localStorage.setItem("codescope_selected_repository_id", id);
+    localStorage.setItem("codescope_selected_repository_name", name);
+    set({ selectedRepositoryId: id, selectedRepositoryName: name });
+  },
+}));
 
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { background: ${T.bg}; color: ${T.text}; font-family: ${T.sans}; height: 100%; }
-  ::selection { background: ${T.accentSoft}; }
-  :focus-visible { outline: 2px solid ${T.accent}; outline-offset: 2px; border-radius: 4px; }
-  input, button { font-family: inherit; }
-  @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
-  @keyframes spin { to { transform:rotate(360deg); } }
-  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
-  @keyframes pulseGreen { 0%,100%{box-shadow:0 0 0 0 rgba(63,185,80,0.4)} 50%{box-shadow:0 0 0 6px rgba(63,185,80,0)} }
-  @keyframes shimmer { 100% { transform: translateX(100%); } }
-  @keyframes progressSweep { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
-  @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
-  @keyframes dropPulse { 0%,100% { border-color: rgba(61,139,122,0.5); background: rgba(61,139,122,0.06); } 50% { border-color: rgba(61,139,122,0.9); background: rgba(61,139,122,0.12); } }
-  @keyframes uploadFill { from { width: 0%; } to { width: 100%; } }
-  @keyframes cardIn { from { opacity:0; transform:scale(0.97) translateY(8px); } to { opacity:1; transform:scale(1) translateY(0); } }
-  .repo-card { transition: border-color 0.16s, transform 0.16s, box-shadow 0.16s, background 0.16s; }
-  .repo-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.13) !important; box-shadow: 0 10px 32px rgba(0,0,0,0.28); }
-  .repo-card-new { animation: cardIn 0.3s ease; }
-  .drop-active { animation: dropPulse 1.2s ease infinite; }
-  .upload-tab { transition: color 0.15s, border-color 0.15s, background 0.15s; }
-  .repo-action-btn { transition: background 0.12s, color 0.12s; }
-  .repo-action-btn:hover { background: rgba(255,255,255,0.06) !important; }
-  .repo-list-row { transition: background 0.12s; }
-  .repo-list-row:hover { background: rgba(255,255,255,0.03) !important; }
-  .sidebar-item { transition: background 0.12s, color 0.12s; }
-  .sidebar-item:hover { background: ${T.surfaceHov} !important; color: ${T.text} !important; }
-  .sidebar-item.active { background: ${T.accentSoft} !important; color: ${T.accentBright} !important; }
-  .nav-dropdown { animation: fadeUp 0.18s ease; }
-  .auth-card { animation: fadeUp 0.4s ease; }
-  .page-in { animation: fadeIn 0.25s ease; }
-  .dash-card { transition: border-color 0.16s ease, transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease; }
-  .dash-card:hover { transform: translateY(-2px); border-color: ${T.borderMid} !important; box-shadow: 0 12px 36px rgba(0,0,0,0.24); }
-  .dash-grid-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-  .dash-priority-grid { display: grid; grid-template-columns: minmax(260px, 1.2fr) repeat(3, minmax(170px, 1fr)); gap: 12px; }
-  .dash-grid-main { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr); gap: 16px; align-items: start; }
-  .dash-grid-three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  .dash-skeleton { position: relative; overflow: hidden; background: ${T.surfaceEl}; border-radius: 6px; }
-  .dash-skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent); animation: shimmer 1.35s infinite; }
-  .dash-progress-fill { background-size: 220% 100%; animation: progressSweep 2.8s linear infinite; }
-  @media (max-width: 1180px) {
-    .dash-grid-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .dash-priority-grid, .dash-grid-main, .dash-grid-three { grid-template-columns: 1fr; }
-  }
-  @media (max-width: 640px) {
-    .dash-page { padding: 24px 16px !important; }
-    .dash-grid-stats { grid-template-columns: 1fr; }
-    .dash-filter-row { grid-template-columns: 1fr !important; }
-    .dash-header-actions { width: 100%; justify-content: stretch !important; }
-    .dash-header-actions button { flex: 1; }
-  }
-  @media (max-width: 900px) {
-    .sidebar-desktop { display: none !important; }
-    .sidebar-mobile-visible { display: flex !important; }
-    .knowledge-layout { grid-template-columns: 260px minmax(560px, 1fr) 320px !important; overflow-x: auto !important; }
-    .dependency-layout { grid-template-columns: minmax(220px, 260px) minmax(520px, 1fr) 300px !important; overflow-x: auto !important; }
-    .dependency-inspector { width: 300px !important; }
-  }
-  @media (min-width: 901px) {
-    .sidebar-mobile-visible { display: none !important; }
-  }
-`;
+const ANALYSIS_STEPS = [
+  "Queued",
+  "Scanning",
+  "Reading Files",
+  "Parsing AST",
+  "Extracting Metadata",
+  "Calculating Metrics",
+  "Completed",
+];
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/* 
    AUTHENTICATION
-═══════════════════════════════════════════════════════════════════════════ */
+ */
 
-/* ─── Input ──────────────────────────────────────────────────────────────── */
+/*  Input  */
 function AuthInput({ label, type = "text", value, onChange, placeholder, error, autoFocus, suffix }) {
   const [show, setShow] = useState(false);
   const isPassword = type === "password";
@@ -239,8 +118,8 @@ function AuthInput({ label, type = "text", value, onChange, placeholder, error, 
   );
 }
 
-/* ─── AuthBtn ────────────────────────────────────────────────────────────── */
-function AuthBtn({ children, onClick, loading, disabled, variant = "primary" }) {
+/*  AuthBtn  */
+function AuthBtn({ children, onClick, loading, disabled, variant = "primary", type = "button" }) {
   const base = {
     width: "100%", padding: "10px 16px", borderRadius: 5,
     fontSize: 14, fontWeight: 500, cursor: loading || disabled ? "not-allowed" : "pointer",
@@ -268,7 +147,7 @@ function AuthBtn({ children, onClick, loading, disabled, variant = "primary" }) 
   );
 }
 
-/* ─── AuthShell ──────────────────────────────────────────────────────────── */
+/*  AuthShell  */
 function AuthShell({ children, title, subtitle }) {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: T.bg, padding: "40px 20px", position: "relative", overflow: "hidden" }}>
@@ -301,7 +180,7 @@ function AuthShell({ children, title, subtitle }) {
   );
 }
 
-/* ─── AuthDivider ────────────────────────────────────────────────────────── */
+/*  AuthDivider  */
 function AuthDivider() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0" }}>
@@ -312,7 +191,7 @@ function AuthDivider() {
   );
 }
 
-/* ─── LOGIN ──────────────────────────────────────────────────────────────── */
+/*  LOGIN  */
 function LoginPage({ nav }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -328,26 +207,35 @@ function LoginPage({ nav }) {
     return e;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setErrors({});
     setLoading(true);
+    try {
+      const data = readEnvelope(await apiClient.post("/auth/login", { email, password }));
+      if (data?.access_token) {
+        localStorage.setItem("codescope_access_token", data.access_token);
+        localStorage.setItem("codescope_refresh_token", data.refresh_token || "");
+      }
+    } catch (error) {
+      console.warn("Backend login unavailable, continuing with demo auth.", error?.message);
+    }
     setTimeout(() => {
       setLoading(false);
       setSuccess(true);
       setTimeout(() => nav("app"), 800);
-    }, 1400);
+    }, 500);
   };
 
   if (success) {
     return (
-      <AuthShell title="Welcome back" subtitle="Signing you in…">
+      <AuthShell title="Welcome back" subtitle="Signing you in">
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "16px 0" }}>
           <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(63,185,80,0.12)", display: "flex", alignItems: "center", justifyContent: "center", animation: "pulseGreen 1.5s ease infinite" }}>
             <Icons.check />
           </div>
-          <p style={{ fontSize: 14, color: T.dim }}>Redirecting to dashboard…</p>
+          <p style={{ fontSize: 14, color: T.dim }}>Redirecting to dashboard</p>
         </div>
       </AuthShell>
     );
@@ -370,7 +258,7 @@ function LoginPage({ nav }) {
       {/* Fields */}
       <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <AuthInput label="Email" type="email" value={email} onChange={setEmail} placeholder="you@company.com" error={errors.email} autoFocus />
-        <AuthInput label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" error={errors.password} />
+        <AuthInput label="Password" type="password" value={password} onChange={setPassword} placeholder="" error={errors.password} />
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: T.dim }}>
@@ -391,7 +279,7 @@ function LoginPage({ nav }) {
   );
 }
 
-/* ─── REGISTER ───────────────────────────────────────────────────────────── */
+/*  REGISTER  */
 function RegisterPage({ nav }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [loading, setLoading] = useState(false);
@@ -407,12 +295,24 @@ function RegisterPage({ nav }) {
     return e;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setErrors({});
     setLoading(true);
-    setTimeout(() => { setLoading(false); nav("login"); }, 1400);
+    try {
+      const data = readEnvelope(await apiClient.post("/auth/register", { email, name, password }));
+      if (data?.access_token) {
+        localStorage.setItem("codescope_access_token", data.access_token);
+        localStorage.setItem("codescope_refresh_token", data.refresh_token || "");
+        setLoading(false);
+        nav("app");
+        return;
+      }
+    } catch (error) {
+      console.warn("Backend registration unavailable, returning to sign in.", error?.message);
+    }
+    setTimeout(() => { setLoading(false); nav("login"); }, 500);
   };
 
   return (
@@ -432,7 +332,7 @@ function RegisterPage({ nav }) {
   );
 }
 
-/* ─── FORGOT PASSWORD ────────────────────────────────────────────────────── */
+/*  FORGOT PASSWORD  */
 function ForgotPage({ nav }) {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -450,23 +350,23 @@ function ForgotPage({ nav }) {
       {sent ? (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "8px 0" }}>
           <div style={{ width: 44, height: 44, borderRadius: "50%", background: T.accentSoft, border: `1px solid ${T.accentBorder}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ color: T.accentBright, fontSize: 20 }}>✓</span>
+            <span style={{ color: T.accentBright, fontSize: 12, fontWeight: 700 }}>Sent</span>
           </div>
-          <p style={{ fontSize: 14, color: T.dim, textAlign: "center" }}>Check your inbox — a reset link is on its way.</p>
+          <p style={{ fontSize: 14, color: T.dim, textAlign: "center" }}>Check your inbox - a reset link is on its way.</p>
           <button onClick={() => nav("login")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: T.accent }}>Back to sign in</button>
         </div>
       ) : (
         <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <AuthInput label="Email" type="email" value={email} onChange={setEmail} placeholder="you@company.com" error={error} autoFocus />
           <AuthBtn onClick={handleSubmit} loading={loading}>Send reset link</AuthBtn>
-          <button onClick={() => nav("login")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: T.faint, textAlign: "center" }}>← Back to sign in</button>
+          <button onClick={() => nav("login")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: T.faint, textAlign: "center" }}>Back to sign in</button>
         </form>
       )}
     </AuthShell>
   );
 }
 
-/* ─── RESET PASSWORD ─────────────────────────────────────────────────────── */
+/*  RESET PASSWORD  */
 function ResetPage({ nav }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -493,26 +393,10 @@ function ResetPage({ nav }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/* 
    APP SHELL
-═══════════════════════════════════════════════════════════════════════════ */
+ */
 
-const NAV_ITEMS = [
-  { id: "dashboard",    label: "Dashboard",           Icon: Icons.dashboard,   group: "main" },
-  { id: "projects",     label: "Projects",            Icon: Icons.projects,    group: "main" },
-  { id: "repos",        label: "Repositories",        Icon: Icons.repos,       group: "main" },
-  null, /* divider */
-  { id: "arch",         label: "Architecture",        Icon: Icons.arch,        group: "explore" },
-  { id: "deps",         label: "Dependencies",        Icon: Icons.deps,        group: "explore" },
-  { id: "git",          label: "Git Intelligence",    Icon: Icons.git,         group: "explore" },
-  { id: "impact",       label: "Impact Analysis",     Icon: Icons.impact,      group: "explore" },
-  { id: "errors",       label: "Error Investigation", Icon: Icons.error,       group: "explore" },
-  null,
-  { id: "ai",           label: "AI Assistant",        Icon: Icons.ai,          group: "tools" },
-  { id: "settings",     label: "Settings",            Icon: Icons.settings,    group: "tools" },
-];
-
-/* ─── SidebarItem ────────────────────────────────────────────────────────── */
 function SidebarItem({ item, collapsed, active, onClick }) {
   const [hovered, setHovered] = useState(false);
   const isActive = active === item.id;
@@ -540,7 +424,7 @@ function SidebarItem({ item, collapsed, active, onClick }) {
   );
 }
 
-/* ─── Sidebar ────────────────────────────────────────────────────────────── */
+/*  Sidebar  */
 function Sidebar({ collapsed, setCollapsed, activePage, setActivePage }) {
   const [wsOpen, setWsOpen] = useState(false);
   const width = collapsed ? 56 : 220;
@@ -646,7 +530,7 @@ function Sidebar({ collapsed, setCollapsed, activePage, setActivePage }) {
   );
 }
 
-/* ─── Breadcrumb ─────────────────────────────────────────────────────────── */
+/*  Breadcrumb  */
 const BREADCRUMB_ROUTE_MAP = {
   "Dashboard": "dashboard",
   "Projects": "projects",
@@ -685,7 +569,7 @@ function Breadcrumb({ trail, setActivePage }) {
   );
 }
 
-/* ─── GlobalSearch ───────────────────────────────────────────────────────── */
+/*  GlobalSearch  */
 function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -721,8 +605,8 @@ function GlobalSearch() {
         aria-label="Search (Ctrl+K)"
       >
         <Icons.search />
-        <span style={{ fontSize: 13, flex: 1, textAlign: "left" }}>Search…</span>
-        <span style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.borderMid}`, borderRadius: T.r4, padding: "1px 6px", color: T.faint }}>⌘K</span>
+        <span style={{ fontSize: 13, flex: 1, textAlign: "left" }}>Search</span>
+        <span style={{ fontSize: 11, fontFamily: T.mono, background: T.surface, border: `1px solid ${T.borderMid}`, borderRadius: T.r4, padding: "1px 6px", color: T.faint }}>Ctrl K</span>
       </button>
 
       {/* Modal */}
@@ -742,7 +626,7 @@ function GlobalSearch() {
                 ref={inputRef}
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Search files, functions, services…"
+                placeholder="Search files, functions, services"
                 style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 14, color: T.text }}
               />
               <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, display: "flex" }}>
@@ -756,12 +640,12 @@ function GlobalSearch() {
                   onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov}
                   onMouseLeave={e => e.currentTarget.style.background = "none"}
                 >
-                  <span style={{ fontFamily: T.mono, fontSize: 11 }}>›</span> {r}
+                  <span style={{ fontFamily: T.mono, fontSize: 11 }}>Open</span> {r}
                 </button>
               ))}
             </div>
             <div style={{ padding: "10px 16px", borderTop: `1px solid ${T.border}`, display: "flex", gap: 12 }}>
-              {[["↩","select"],["↑↓","navigate"],["esc","close"]].map(([k,v]) => (
+              {[["","select"],["","navigate"],["esc","close"]].map(([k,v]) => (
                 <span key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: T.faint }}>
                   <span style={{ fontFamily: T.mono, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "1px 6px" }}>{k}</span>
                   {v}
@@ -775,7 +659,7 @@ function GlobalSearch() {
   );
 }
 
-/* ─── TopNav ─────────────────────────────────────────────────────────────── */
+/*  TopNav  */
 function TopNav({ breadcrumb, sidebarCollapsed, setActivePage }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -846,8 +730,8 @@ function TopNav({ breadcrumb, sidebarCollapsed, setActivePage }) {
         {notifOpen && (
           <div className="nav-dropdown" style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 8, width: 300, boxShadow: T.shadow, zIndex: 50 }}>
             <p style={{ fontSize: 12, fontWeight: 500, color: T.dim, padding: "4px 8px 10px" }}>Notifications</p>
-            {[["Impact alert: PaymentService", "3 services at risk · 2m ago", T.warning],
-              ["Analysis complete: auth-gateway", "0 breaking changes · 18m ago", T.success]].map(([t, s, c]) => (
+            {[["Impact alert: PaymentService", "3 services at risk - 2m ago", T.warning],
+              ["Analysis complete: auth-gateway", "0 breaking changes - 18m ago", T.success]].map(([t, s, c]) => (
               <div key={t} style={{ padding: "8px 10px", borderRadius: T.r6, marginBottom: 2 }}
                 onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov}
                 onMouseLeave={e => e.currentTarget.style.background = "none"}
@@ -902,191 +786,7 @@ function TopNav({ breadcrumb, sidebarCollapsed, setActivePage }) {
   );
 }
 
-/* ─── PAGE CONTENT STUBS ─────────────────────────────────────────────────── */
-const PAGE_META = {
-  dashboard:  { label: "Dashboard",           breadcrumb: ["Dashboard"] },
-  projects:   { label: "Projects",            breadcrumb: ["Dashboard", "Projects"] },
-  repos:      { label: "Repositories",        breadcrumb: ["Dashboard", "Repositories"] },
-  arch:       { label: "Architecture",        breadcrumb: ["Dashboard", "Architecture Explorer"] },
-  deps:       { label: "Dependencies",        breadcrumb: ["Dashboard", "Dependency Explorer"] },
-  git:        { label: "Git Intelligence",    breadcrumb: ["Dashboard", "Git Intelligence"] },
-  impact:     { label: "Impact Analysis",     breadcrumb: ["Dashboard", "Impact Analysis"] },
-  errors:     { label: "Error Investigation", breadcrumb: ["Dashboard", "Error Investigation"] },
-  ai:         { label: "AI Assistant",        breadcrumb: ["Dashboard", "AI Assistant"] },
-  settings:   { label: "Settings",            breadcrumb: ["Dashboard", "Settings"] },
-  'repo-overview': { label: "Repository Overview", breadcrumb: ["Dashboard", "Repositories", "frontend-platform"] },
-  'repo-explorer': { label: "Repository Explorer", breadcrumb: ["Dashboard", "Repositories", "frontend-platform", "Explorer"] },
-  'repo-analysis': { label: "Repository Analysis", breadcrumb: ["Dashboard", "Repositories", "frontend-platform", "Analysis"] },
-  'knowledge-graph': { label: "Knowledge Graph", breadcrumb: ["Dashboard", "Repositories", "frontend-platform", "Graph Explorer"] },
-};
-
-const dashboardData = {
-  user: "Arjun",
-  workspace: "Northstar Platform",
-  stats: [
-    ["Projects", "12", "+2 this week", T.success],
-    ["Repositories", "48", "+6 connected", T.success],
-    ["Files Analyzed", "128.4k", "+18%", T.success],
-    ["Functions Indexed", "42,817", "+3,204", T.success],
-    ["Dependencies Found", "9,642", "+411", T.info],
-    ["Architecture Graphs", "34", "+5 generated", T.success],
-    ["Analyses Completed", "216", "+24 today", T.success],
-    ["Avg. Repository Health", "86%", "-3 pts", T.warning],
-  ],
-  repos: [
-    { name: "main-api", language: "TypeScript", branch: "main", status: "Attention", last: "12 min ago", score: 74, risk: "Medium", color: T.warning },
-    { name: "payments-service", language: "Go", branch: "release/2.4", status: "Healthy", last: "38 min ago", score: 92, risk: "Low", color: T.success },
-    { name: "auth-gateway", language: "Java", branch: "main", status: "Critical path", last: "1 hr ago", score: 61, risk: "High", color: T.error },
-  ],
-  activity: [
-    ["Repository Uploaded", "frontend-platform", "2 min ago", Icons.repos],
-    ["Analysis Completed", "payments-service", "18 min ago", Icons.check],
-    ["Dependency Graph Generated", "main-api", "44 min ago", Icons.deps],
-    ["Architecture Updated", "auth-gateway", "1 hr ago", Icons.arch],
-    ["Project Created", "mobile-suite", "3 hr ago", Icons.projects],
-    ["Future AI Analysis Placeholder", "search-indexer", "Soon", Icons.ai],
-  ],
-  recent: [
-    ["main-api", "Today, 4:18 PM", "TypeScript", 72],
-    ["auth-gateway", "Today, 2:03 PM", "Java", 58],
-    ["data-pipeline", "Yesterday", "Python", 91],
-  ],
-  queue: [
-    { repo: "frontend-platform", progress: 68, eta: "4 min", step: "Parsing Code" },
-    { repo: "search-indexer", progress: 42, eta: "9 min", step: "Scanning Files" },
-  ],
-  languages: [
-    ["Python", 28, "#58A6FF"],
-    ["TypeScript", 24, T.accentBright],
-    ["JavaScript", 17, "#D29922"],
-    ["Go", 13, "#79C0FF"],
-    ["Java", 11, "#F0883E"],
-    ["Rust", 7, "#F85149"],
-  ],
-  risks: [
-    ["Critical Repositories", "3", T.error],
-    ["Medium Risk", "9", T.warning],
-    ["Healthy Projects", "18", T.success],
-    ["Pending Analysis", "7", T.info],
-  ],
-  favorites: [
-    ["payments-service", "92% health"],
-    ["main-api", "3 queued tasks"],
-    ["frontend-platform", "analysis running"],
-  ],
-};
-
-function DashButton({ children, icon: IconSlot, label, variant = "ghost", onClick, title, type = "button", style }) {
-  const isPrimary = variant === "primary";
-  return (
-    <button
-      onClick={onClick}
-      type={type}
-      title={title}
-      style={{
-        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
-        minHeight: 34, padding: "8px 12px", borderRadius: T.r6, cursor: "pointer",
-        border: `1px solid ${isPrimary ? T.accentBorder : T.border}`,
-        background: isPrimary ? T.accent : T.surfaceEl,
-        color: isPrimary ? "#fff" : T.dim, fontSize: 12, fontWeight: 500,
-        ...style,
-      }}
-    >
-      {IconSlot && <IconSlot />}
-      {label || children}
-    </button>
-  );
-}
-
-function Pill({ children, color = T.dim }) {
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 8px",
-      borderRadius: T.r12, border: `1px solid ${color}55`, background: `${color}16`,
-      color, fontSize: 11, fontWeight: 500, whiteSpace: "nowrap"
-    }}>{children}</span>
-  );
-}
-
-function ProgressBar({ value, color = T.accentBright, animated = false }) {
-  return (
-    <div aria-label={`${value}% complete`} style={{ height: 7, borderRadius: 999, background: T.bg, border: `1px solid ${T.border}`, overflow: "hidden" }}>
-      <div
-        className={animated ? "dash-progress-fill" : ""}
-        style={{
-          width: `${value}%`, height: "100%", borderRadius: 999,
-          background: animated
-            ? `linear-gradient(90deg, ${color}, ${T.accentBright}, ${color})`
-            : color,
-        }}
-      />
-    </div>
-  );
-}
-
-function WidgetShell({ title, children, action, loading, empty, error }) {
-  const [collapsed, setCollapsed] = useState(false);
-  return (
-    <section className="dash-card" style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, overflow: "hidden" }}>
-      <div style={{ minHeight: 48, padding: "12px 14px", borderBottom: collapsed ? "none" : `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
-        <h2 style={{ fontSize: 13, fontWeight: 600, color: T.text, letterSpacing: "-0.01em", flex: 1 }}>{title}</h2>
-        {action}
-        <button aria-label={`Refresh ${title}`} title="Refresh" style={{ background: "none", border: "none", color: T.faint, cursor: "pointer", display: "flex", padding: 5 }}><Icons.git /></button>
-        <button aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`} title={collapsed ? "Expand" : "Collapse"} onClick={() => setCollapsed(c => !c)} style={{ background: "none", border: "none", color: T.faint, cursor: "pointer", display: "flex", padding: 5 }}>
-          {collapsed ? <Icons.chevronRight /> : <Icons.chevronDown />}
-        </button>
-      </div>
-      {!collapsed && (
-        <div style={{ padding: 14 }}>
-          {loading ? <WidgetLoading /> : error ? <WidgetError /> : empty ? <WidgetEmpty /> : children}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function WidgetLoading() {
-  return (
-    <div style={{ display: "grid", gap: 10 }}>
-      <div className="dash-skeleton" style={{ height: 16, width: "45%" }} />
-      <div className="dash-skeleton" style={{ height: 86 }} />
-      <div className="dash-skeleton" style={{ height: 12, width: "70%" }} />
-    </div>
-  );
-}
-
-function WidgetEmpty() {
-  return (
-    <div style={{ minHeight: 140, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", color: T.faint, fontSize: 13 }}>
-      No projects yet. Create a project or upload a repository to begin.
-    </div>
-  );
-}
-
-function WidgetError() {
-  return (
-    <div style={{ minHeight: 130, display: "grid", placeItems: "center", gap: 10, color: T.faint, textAlign: "center" }}>
-      <div>
-        <div style={{ color: T.text, fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Unable to load dashboard.</div>
-        <div style={{ fontSize: 12 }}>Check the workspace connection and try again.</div>
-      </div>
-      <DashButton><Icons.git />Retry</DashButton>
-    </div>
-  );
-}
-
-function MetricCard({ label, value, trend, color }) {
-  return (
-    <div className="dash-card" style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 16, minHeight: 112 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
-        <span style={{ fontSize: 12, color: T.faint }}>{label}</span>
-        <Pill color={color}>{trend}</Pill>
-      </div>
-      <div style={{ fontFamily: T.mono, fontSize: 26, color: T.text, letterSpacing: "-0.02em" }}>{value}</div>
-    </div>
-  );
-}
-
+/*  PAGE CONTENT STUBS  */
 function DashboardPage({ setActivePage }) {
   const [query, setQuery] = useState("");
   const [viewState, setViewState] = useState("loaded");
@@ -1322,8 +1022,13 @@ function DashboardPage({ setActivePage }) {
   );
 }
 
-function ProjectsPage() {
+function ProjectsPage({ setActivePage }) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [showFilters, setShowFilters] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [menuProjectId, setMenuProjectId] = useState(null);
+  const [draftProject, setDraftProject] = useState({ name: "", status: "Active" });
   const [projects, setProjects] = useState([
     { id: "p1", name: "Northstar Platform", envs: 4, repos: 12, health: 92, status: "Active" },
     { id: "p2", name: "Mobile API Gateway", envs: 2, repos: 3, health: 68, status: "Warning" },
@@ -1332,53 +1037,106 @@ function ProjectsPage() {
     { id: "p5", name: "Customer Portal", envs: 4, repos: 5, health: 88, status: "Active" }
   ]);
 
-  const filteredProjects = projects.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredProjects = projects.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.status.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "All" || p.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+  const projectTotals = {
+    repos: filteredProjects.reduce((sum, project) => sum + project.repos, 0),
+    envs: filteredProjects.reduce((sum, project) => sum + project.envs, 0),
+    avgHealth: filteredProjects.length ? Math.round(filteredProjects.reduce((sum, project) => sum + project.health, 0) / filteredProjects.length) : 0,
+  };
+  const resetFilters = () => { setSearchTerm(""); setStatusFilter("All"); };
+  const createProject = () => {
+    const name = draftProject.name.trim();
+    if (!name) return;
+    const health = draftProject.status === "Critical" ? 42 : draftProject.status === "Warning" ? 68 : 90;
+    setProjects(prev => [{ id: `p${Date.now()}`, name, envs: 1, repos: 0, health, status: draftProject.status }, ...prev]);
+    setDraftProject({ name: "", status: "Active" });
+    setShowCreate(false);
+  };
+  const markCritical = projectId => {
+    setProjects(prev => prev.map(project => project.id === projectId ? { ...project, status: "Critical", health: Math.min(project.health, 45) } : project));
+    setMenuProjectId(null);
+  };
+  const deleteProject = projectId => {
+    setProjects(prev => prev.filter(project => project.id !== projectId));
+    setMenuProjectId(null);
+  };
 
   return (
     <div className="page-in" style={{ padding: "32px 36px", maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 32 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 20, marginBottom: 24, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 600, color: T.text, letterSpacing: "-0.02em", marginBottom: 6 }}>Projects</h1>
           <p style={{ fontSize: 13, color: T.dim }}>Manage your workspaces and aggregate repository analytics.</p>
         </div>
-        <DashButton icon={Icons.upload} label="New Project" variant="primary" onClick={() => {}} />
+        <DashButton icon={Icons.upload} label="New Project" variant="primary" onClick={() => setShowCreate(true)} />
       </div>
 
-      {/* Controls */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 24, alignItems: "center" }}>
-        <div style={{ position: "relative", width: 280 }}>
-          <div style={{ position: "absolute", left: 12, top: 9, color: T.faint }}><Icons.search size={14} /></div>
-          <input 
-            type="text" 
-            placeholder="Search projects..." 
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            style={{ width: "100%", padding: "7px 12px 7px 34px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, fontSize: 13, outline: "none" }}
-          />
+      <section aria-label="Project summary" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 24 }}>
+        {[
+          ["Visible Projects", filteredProjects.length, T.text],
+          ["Repositories", projectTotals.repos, T.info],
+          ["Environments", projectTotals.envs, T.accentBright],
+          ["Average Health", projectTotals.avgHealth || "-", projectTotals.avgHealth > 80 ? T.success : projectTotals.avgHealth > 50 ? T.warning : T.error],
+        ].map(([label, value, color]) => (
+          <div key={label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+            <div style={{ color: T.faint, fontSize: 11, marginBottom: 6 }}>{label}</div>
+            <div style={{ color, fontSize: 20, fontFamily: T.mono }}>{value}</div>
+          </div>
+        ))}
+      </section>
+
+      <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 16, marginBottom: 24 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", width: 320, maxWidth: "100%" }}>
+            <div style={{ position: "absolute", left: 12, top: 9, color: T.faint }}><Icons.search size={14} /></div>
+            <input type="text" aria-label="Search projects" placeholder="Search projects..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onKeyDown={e => { if (e.key === "Escape") setSearchTerm(""); }} style={{ width: "100%", padding: "7px 12px 7px 34px", background: T.bg, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, fontSize: 13, outline: "none" }} />
+          </div>
+          <DashButton icon={Icons.gridView} label={showFilters ? "Hide Filters" : "Filter"} variant="secondary" onClick={() => setShowFilters(prev => !prev)} />
+          {(searchTerm || statusFilter !== "All") && <DashButton label="Reset" variant="secondary" onClick={resetFilters} />}
+          <div style={{ color: T.faint, fontSize: 12, marginLeft: "auto" }}>{filteredProjects.length} of {projects.length} projects</div>
         </div>
-        <DashButton icon={Icons.gridView} label="Filter" variant="secondary" onClick={() => {}} />
+        {showFilters && (
+          <div style={{ display: "flex", gap: 12, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${T.border}`, flexWrap: "wrap" }}>
+            <label style={{ display: "grid", gap: 5, color: T.dim, fontSize: 11 }}>
+              Status
+              <select aria-label="Filter projects by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ minWidth: 180, background: T.bg, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, padding: "7px 10px", outline: "none" }}>
+                {["All", "Active", "Warning", "Critical"].map(status => <option key={status} value={status}>{status}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
       </div>
 
-      {/* Project Grid */}
       {filteredProjects.length === 0 ? (
         <div style={{ padding: 60, textAlign: "center", color: T.faint, background: T.surface, borderRadius: T.r8, border: `1px solid ${T.border}` }}>
           <Icons.search size={24} />
           <div style={{ marginTop: 12, fontSize: 14 }}>No projects found matching "{searchTerm}".</div>
+          <DashButton label="Clear Filters" variant="secondary" onClick={resetFilters} style={{ margin: "16px auto 0" }} />
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
           {filteredProjects.map((p) => (
-            <div key={p.id} className="project-card" style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 20, display: "flex", flexDirection: "column", gap: 16, cursor: "pointer", transition: "all 0.2s ease" }}>
+            <article key={p.id} tabIndex={0} role="button" aria-label={`Open ${p.name} repositories`} className="project-card" onClick={() => setActivePage("repos")} onKeyDown={e => { if (e.key === "Enter") setActivePage("repos"); }} style={{ position: "relative", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 20, display: "flex", flexDirection: "column", gap: 16, cursor: "pointer", transition: "all 0.2s ease", outline: "none" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 4 }}>{p.name}</div>
                   <div style={{ fontSize: 12, color: T.dim, display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ color: p.health > 80 ? T.success : p.health > 50 ? T.warning : T.error }}>● {p.status}</span>
+                    <span style={{ color: p.health > 80 ? T.success : p.health > 50 ? T.warning : T.error }}>? {p.status}</span>
                   </div>
                 </div>
-                <button style={{ background: "none", border: "none", color: T.faint, cursor: "pointer", padding: 4 }}><Icons.moreH size={16}/></button>
+                <button aria-label={`Project actions for ${p.name}`} onClick={e => { e.stopPropagation(); setMenuProjectId(menuProjectId === p.id ? null : p.id); }} style={{ background: "none", border: "none", color: T.faint, cursor: "pointer", padding: 4 }}><Icons.moreH size={16}/></button>
               </div>
-              
+              {menuProjectId === p.id && (
+                <div role="menu" onClick={e => e.stopPropagation()} style={{ position: "absolute", top: 44, right: 18, zIndex: 5, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, boxShadow: T.shadow, padding: 6, minWidth: 150 }}>
+                  <button role="menuitem" onClick={() => setActivePage("repos")} style={projectMenuButton}>Open Repositories</button>
+                  <button role="menuitem" onClick={() => markCritical(p.id)} style={projectMenuButton}>Mark Critical</button>
+                  <button role="menuitem" onClick={() => deleteProject(p.id)} style={{ ...projectMenuButton, color: T.error }}>Delete</button>
+                </div>
+              )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 8 }}>
                 <div style={{ background: T.surfaceEl, padding: "8px 12px", borderRadius: T.r6 }}>
                   <div style={{ fontSize: 11, color: T.dim, marginBottom: 4 }}>Repositories</div>
@@ -1389,17 +1147,51 @@ function ProjectsPage() {
                   <div style={{ fontSize: 16, fontFamily: T.mono, color: p.health > 80 ? T.success : p.health > 50 ? T.warning : T.error }}>{p.health}</div>
                 </div>
               </div>
-            </div>
+            </article>
           ))}
+        </div>
+      )}
+
+      {showCreate && (
+        <div role="dialog" aria-modal="true" aria-label="Create project" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 1200, display: "grid", placeItems: "center", padding: 20 }} onClick={() => setShowCreate(false)}>
+          <div style={{ width: "min(460px, 100%)", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, boxShadow: T.shadowLg, padding: 20 }} onClick={e => e.stopPropagation()}>
+            <h2 style={{ color: T.text, fontSize: 18, marginBottom: 6 }}>New Project</h2>
+            <p style={{ color: T.dim, fontSize: 13, marginBottom: 18 }}>Create a workspace container for repositories and analysis.</p>
+            <label style={{ display: "grid", gap: 6, color: T.dim, fontSize: 12, marginBottom: 14 }}>
+              Project Name
+              <input autoFocus aria-label="Project name" value={draftProject.name} onChange={e => setDraftProject({ ...draftProject, name: e.target.value })} onKeyDown={e => { if (e.key === "Enter") createProject(); if (e.key === "Escape") setShowCreate(false); }} placeholder="payments-modernization" style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, padding: "9px 10px", outline: "none" }} />
+            </label>
+            <label style={{ display: "grid", gap: 6, color: T.dim, fontSize: 12, marginBottom: 20 }}>
+              Initial Status
+              <select aria-label="Initial project status" value={draftProject.status} onChange={e => setDraftProject({ ...draftProject, status: e.target.value })} style={{ background: T.bg, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, padding: "9px 10px", outline: "none" }}>
+                {["Active", "Warning", "Critical"].map(status => <option key={status} value={status}>{status}</option>)}
+              </select>
+            </label>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <DashButton label="Cancel" variant="secondary" onClick={() => setShowCreate(false)} />
+              <DashButton label="Create Project" variant="primary" onClick={createProject} />
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   REPOSITORIES PAGE — PROMPT 5
-═══════════════════════════════════════════════════════════════════════════ */
+const projectMenuButton = {
+  width: "100%",
+  textAlign: "left",
+  background: "none",
+  border: "none",
+  color: T.text,
+  padding: "8px 10px",
+  borderRadius: T.r4,
+  cursor: "pointer",
+  fontSize: 12,
+};
+/* 
+   REPOSITORIES PAGE  PROMPT 5
+ */
 
 const LANG_COLORS = {
   TypeScript: "#4EADA0", Go: "#79C0FF", Java: "#F0883E",
@@ -1419,12 +1211,12 @@ const MOCK_REPOS = [
   { id: "r1", name: "main-api", description: "Core REST API gateway powering all client-facing services", language: "TypeScript", branch: "main", status: "uploaded", visibility: "Private", size: "14.2 MB", last: "12 min ago", analysisStatus: "Not analyzed" },
   { id: "r2", name: "payments-service", description: "Payment processing microservice with Stripe and PayPal integrations", language: "Go", branch: "release/2.4", status: "connected", visibility: "Private", size: "8.7 MB", last: "38 min ago", analysisStatus: "Not analyzed" },
   { id: "r3", name: "auth-gateway", description: "OAuth2 + JWT authentication and authorization gateway", language: "Java", branch: "main", status: "uploaded", visibility: "Internal", size: "22.1 MB", last: "1 hr ago", analysisStatus: "Not analyzed" },
-  { id: "r4", name: "frontend-platform", description: "React + Vite frontend monorepo with shared design system", language: "React", branch: "develop", status: "pending", visibility: "Public", size: "—", last: "2 hr ago", analysisStatus: "Not analyzed" },
+  { id: "r4", name: "frontend-platform", description: "React + Vite frontend monorepo with shared design system", language: "React", branch: "develop", status: "pending", visibility: "Public", size: "", last: "2 hr ago", analysisStatus: "Not analyzed" },
   { id: "r5", name: "data-pipeline", description: "ETL pipeline for analytics ingestion and transformation", language: "Python", branch: "main", status: "archived", visibility: "Private", size: "45.3 MB", last: "3 days ago", analysisStatus: "Not analyzed" },
-  { id: "r6", name: "search-indexer", description: "Full-text search indexing service built on Elasticsearch", language: "Go", branch: "feat/v3", status: "connected", visibility: "Internal", size: "—", last: "5 hr ago", analysisStatus: "Not analyzed" },
+  { id: "r6", name: "search-indexer", description: "Full-text search indexing service built on Elasticsearch", language: "Go", branch: "feat/v3", status: "connected", visibility: "Internal", size: "", last: "5 hr ago", analysisStatus: "Not analyzed" },
 ];
 
-/* ─── RepoBadge ──────────────────────────────────────────────────────────── */
+/*  RepoBadge  */
 function RepoBadge({ status }) {
   const m = STATUS_META[status] || STATUS_META.pending;
   return (
@@ -1435,7 +1227,7 @@ function RepoBadge({ status }) {
   );
 }
 
-/* ─── LangDot ────────────────────────────────────────────────────────────── */
+/*  LangDot  */
 function LangDot({ lang }) {
   const color = LANG_COLORS[lang] || T.faint;
   return (
@@ -1446,7 +1238,7 @@ function LangDot({ lang }) {
   );
 }
 
-/* ─── VisibilityBadge ────────────────────────────────────────────────────── */
+/*  VisibilityBadge  */
 function VisibilityBadge({ vis }) {
   const colors = { Private: T.faint, Internal: T.warning, Public: T.success };
   const color = colors[vis] || T.faint;
@@ -1455,7 +1247,7 @@ function VisibilityBadge({ vis }) {
   );
 }
 
-/* ─── RepoActionsMenu ────────────────────────────────────────────────────── */
+/*  RepoActionsMenu  */
 function RepoActionsMenu({ repo, onArchive, onDelete, onClose }) {
   return (
     <div
@@ -1463,9 +1255,9 @@ function RepoActionsMenu({ repo, onArchive, onDelete, onClose }) {
       onClick={e => e.stopPropagation()}
     >
       {[
-        { label: "Open", icon: "→", action: onClose },
-        { label: "Edit details", icon: "✎", action: onClose },
-        { label: "Settings", icon: "⚙", action: onClose },
+        { label: "Open", icon: "", action: onClose },
+        { label: "Edit details", icon: "", action: onClose },
+        { label: "Settings", icon: "", action: onClose },
       ].map(({ label, icon, action }) => (
         <button key={label} onClick={action} className="repo-action-btn" style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "none", border: "none", color: T.dim, fontSize: 12, cursor: "pointer", borderRadius: T.r6, textAlign: "left" }}>
           <span style={{ fontSize: 13, width: 16, color: T.faint }}>{icon}</span>{label}
@@ -1473,16 +1265,16 @@ function RepoActionsMenu({ repo, onArchive, onDelete, onClose }) {
       ))}
       <div style={{ height: 1, background: T.border, margin: "4px 0" }} />
       <button onClick={() => { onArchive(repo.id); onClose(); }} className="repo-action-btn" style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "none", border: "none", color: T.dim, fontSize: 12, cursor: "pointer", borderRadius: T.r6, textAlign: "left" }}>
-        <span style={{ fontSize: 13, width: 16, color: T.faint }}>⊡</span>Archive
+        <span style={{ fontSize: 11, width: 42, color: T.faint }}>Archive</span>
       </button>
       <button onClick={() => { onDelete(repo.id); onClose(); }} className="repo-action-btn" style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "none", border: "none", color: T.error, fontSize: 12, cursor: "pointer", borderRadius: T.r6, textAlign: "left" }}>
-        <span style={{ fontSize: 13, width: 16 }}>✕</span>Delete
+        <span style={{ fontSize: 11, width: 42 }}>Delete</span>
       </button>
     </div>
   );
 }
 
-/* ─── RepoCard (Grid View) ───────────────────────────────────────────────── */
+/*  RepoCard (Grid View)  */
 function RepoCard({ repo, isFav, onFav, onArchive, onDelete, isNew, onSelect }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -1504,16 +1296,16 @@ function RepoCard({ repo, isFav, onFav, onArchive, onDelete, isNew, onSelect }) 
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 650, color: T.text, letterSpacing: "-0.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{repo.name}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
-              <span style={{ fontSize: 10, fontFamily: T.mono, color: T.faint }}>⎇ {repo.branch}</span>
+              <span style={{ fontSize: 10, fontFamily: T.mono, color: T.faint }}>Branch: {repo.branch}</span>
             </div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
           <button onClick={() => onFav(repo.id)} aria-label={isFav ? "Remove favorite" : "Add favorite"} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: isFav ? "#D29922" : T.faint, fontSize: 15, display: "flex", alignItems: "center", borderRadius: T.r4 }}>
-            {isFav ? "★" : "☆"}
+            {isFav ? "Starred" : "Star"}
           </button>
           <div style={{ position: "relative" }} ref={menuRef}>
-            <button onClick={() => setMenuOpen(o => !o)} aria-label="Actions" style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", color: T.faint, display: "flex", alignItems: "center", borderRadius: T.r4, fontSize: 18, lineHeight: 1 }}>···</button>
+            <button onClick={() => setMenuOpen(o => !o)} aria-label="Actions" style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", color: T.faint, display: "flex", alignItems: "center", borderRadius: T.r4, fontSize: 12, lineHeight: 1 }}>Actions</button>
             {menuOpen && <RepoActionsMenu repo={repo} onArchive={onArchive} onDelete={onDelete} onClose={() => setMenuOpen(false)} />}
           </div>
         </div>
@@ -1534,8 +1326,8 @@ function RepoCard({ repo, isFav, onFav, onArchive, onDelete, isNew, onSelect }) 
       {/* Footer */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${T.border}`, paddingTop: 12 }}>
         <div style={{ display: "flex", gap: 14 }}>
-          <span style={{ fontSize: 11, color: T.faint }}>📦 {repo.size}</span>
-          <span style={{ fontSize: 11, color: T.faint }}>🕐 {repo.last}</span>
+          <span style={{ fontSize: 11, color: T.faint }}>Size: {repo.size}</span>
+          <span style={{ fontSize: 11, color: T.faint }}>Updated: {repo.last}</span>
         </div>
         <span style={{ fontSize: 11, color: T.faint, fontFamily: T.mono }}>{repo.analysisStatus}</span>
       </div>
@@ -1543,7 +1335,7 @@ function RepoCard({ repo, isFav, onFav, onArchive, onDelete, isNew, onSelect }) 
   );
 }
 
-/* ─── RepoListRow (List View) ────────────────────────────────────────────── */
+/*  RepoListRow (List View)  */
 function RepoListRow({ repo, isFav, onFav, onArchive, onDelete, isNew, onSelect }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -1554,7 +1346,7 @@ function RepoListRow({ repo, isFav, onFav, onArchive, onDelete, isNew, onSelect 
   }, []);
 
   return (
-    <div className={`repo-list-row ${isNew ? "repo-card-new" : ""}`} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderBottom: `1px solid ${T.border}`, opacity: repo.status === "archived" ? 0.6 : 1 }}>
+    <div onClick={onSelect} className={`repo-list-row ${isNew ? "repo-card-new" : ""}`} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderBottom: `1px solid ${T.border}`, opacity: repo.status === "archived" ? 0.6 : 1, cursor: "pointer" }}>
       <div style={{ width: 28, height: 28, borderRadius: T.r6, background: T.surfaceEl, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
         <span style={{ fontSize: 9, fontFamily: T.mono, color: LANG_COLORS[repo.language] || T.faint, fontWeight: 700 }}>{(repo.language || "?").slice(0,2).toUpperCase()}</span>
       </div>
@@ -1563,20 +1355,20 @@ function RepoListRow({ repo, isFav, onFav, onArchive, onDelete, isNew, onSelect 
         <div style={{ fontSize: 11, color: T.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{repo.description}</div>
       </div>
       <LangDot lang={repo.language} />
-      <span style={{ fontSize: 11, fontFamily: T.mono, color: T.faint, minWidth: 80, textAlign: "center" }}>⎇ {repo.branch}</span>
+      <span style={{ fontSize: 11, fontFamily: T.mono, color: T.faint, minWidth: 80, textAlign: "center" }}>Branch: {repo.branch}</span>
       <RepoBadge status={repo.status} />
       <VisibilityBadge vis={repo.visibility} />
       <span style={{ fontSize: 11, color: T.faint, minWidth: 60, textAlign: "right" }}>{repo.last}</span>
-      <button onClick={() => onFav(repo.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: isFav ? "#D29922" : T.faint, padding: 4, flexShrink: 0 }}>{isFav ? "★" : "☆"}</button>
+      <button onClick={() => onFav(repo.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: isFav ? "#D29922" : T.faint, padding: 4, flexShrink: 0 }}>{isFav ? "Starred" : "Star"}</button>
       <div style={{ position: "relative" }} ref={menuRef}>
-        <button onClick={() => setMenuOpen(o => !o)} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, fontSize: 18, padding: 4, lineHeight: 1, flexShrink: 0 }}>···</button>
+        <button onClick={() => setMenuOpen(o => !o)} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, fontSize: 12, padding: 4, lineHeight: 1, flexShrink: 0 }}>Actions</button>
         {menuOpen && <RepoActionsMenu repo={repo} onArchive={onArchive} onDelete={onDelete} onClose={() => setMenuOpen(false)} />}
       </div>
     </div>
   );
 }
 
-/* ─── Skeleton Cards ─────────────────────────────────────────────────────── */
+/*  Skeleton Cards  */
 function RepoSkeletonGrid() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
@@ -1597,7 +1389,7 @@ function RepoSkeletonList() {
   );
 }
 
-/* ─── Empty State ────────────────────────────────────────────────────────── */
+/*  Empty State  */
 function RepoEmptyState({ onUpload, onGit }) {
   return (
     <div style={{ textAlign: "center", padding: "64px 24px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r12, animation: "fadeIn 0.3s ease" }}>
@@ -1611,18 +1403,18 @@ function RepoEmptyState({ onUpload, onGit }) {
         Repositories are the source code units that CodeScope AI will index and analyze. Add a ZIP archive or connect a remote Git URL to get started.
       </p>
       <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-        <button onClick={onUpload} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", background: T.accent, border: "none", borderRadius: T.r6, color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>⬆ Upload ZIP</button>
-        <button onClick={onGit} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 13, cursor: "pointer" }}>⎇ Connect Git</button>
+        <button onClick={onUpload} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", background: T.accent, border: "none", borderRadius: T.r6, color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}> Upload ZIP</button>
+        <button onClick={onGit} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 13, cursor: "pointer" }}>Connect Git</button>
       </div>
     </div>
   );
 }
 
-/* ─── Error State ────────────────────────────────────────────────────────── */
+/*  Error State  */
 function RepoErrorState({ onRetry }) {
   return (
     <div style={{ textAlign: "center", padding: "64px 24px", background: `${T.error}08`, border: `1px solid ${T.error}30`, borderRadius: T.r12 }}>
-      <div style={{ fontSize: 36, marginBottom: 12 }}>⚠</div>
+      <div style={{ fontSize: 36, marginBottom: 12 }}></div>
       <h3 style={{ fontSize: 16, fontWeight: 650, color: T.text, marginBottom: 6 }}>Unable to load repositories</h3>
       <p style={{ fontSize: 13, color: T.dim, marginBottom: 24 }}>Check your project connection and try again.</p>
       <button onClick={onRetry} style={{ padding: "8px 20px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 12, cursor: "pointer" }}>Retry</button>
@@ -1630,7 +1422,7 @@ function RepoErrorState({ onRetry }) {
   );
 }
 
-/* ─── DropZone ───────────────────────────────────────────────────────────── */
+/*  DropZone  */
 function DropZone({ onFile, selectedFile }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef(null);
@@ -1653,26 +1445,26 @@ function DropZone({ onFile, selectedFile }) {
       <input ref={inputRef} type="file" accept=".zip" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) onFile(e.target.files[0]); }} />
       {selectedFile ? (
         <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center" }}>
-          <span style={{ fontSize: 28 }}>📦</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: T.accentBright }}>ZIP</span>
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{selectedFile.name}</div>
-            <div style={{ fontSize: 11, color: T.faint }}>{(selectedFile.size / 1024 / 1024).toFixed(2)} MB · ZIP archive</div>
+            <div style={{ fontSize: 11, color: T.faint }}>{(selectedFile.size / 1024 / 1024).toFixed(2)} MB  ZIP archive</div>
           </div>
-          <button onClick={e => { e.stopPropagation(); onFile(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, fontSize: 18, marginLeft: 8 }}>✕</button>
+          <button onClick={e => { e.stopPropagation(); onFile(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, fontSize: 12, marginLeft: 8 }}>Clear</button>
         </div>
       ) : (
         <>
-          <div style={{ fontSize: 32, marginBottom: 10 }}>📂</div>
+          <div style={{ fontSize: 32, marginBottom: 10 }}></div>
           <div style={{ fontSize: 13, fontWeight: 500, color: T.dim, marginBottom: 4 }}>Drop your ZIP archive here</div>
           <div style={{ fontSize: 12, color: T.faint, marginBottom: 14 }}>or click to browse files</div>
-          <span style={{ fontSize: 11, color: T.faint, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "3px 10px" }}>.zip only · any size</span>
+          <span style={{ fontSize: 11, color: T.faint, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "3px 10px" }}>.zip only  any size</span>
         </>
       )}
     </div>
   );
 }
 
-/* ─── Upload Modal ───────────────────────────────────────────────────────── */
+/*  Upload Modal  */
 function UploadModal({ onClose, onRepoAdded, initialTab = "zip" }) {
   const [tab, setTab] = useState(initialTab);
   const [file, setFile] = useState(null);
@@ -1717,7 +1509,7 @@ function UploadModal({ onClose, onRepoAdded, initialTab = "zip" }) {
     if (gitUrl && !gitUrl.startsWith("http")) errs.gitUrl = "URL must start with http:// or https://";
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setErrors({});
-    onRepoAdded({ id: `r${Date.now()}`, name: gitName, description: gitDesc || "Git connected repository", language: "Unknown", branch: gitBranch || "main", status: "connected", visibility: gitVis, size: "—", last: "Just now", analysisStatus: "Not analyzed" });
+    onRepoAdded({ id: `r${Date.now()}`, name: gitName, description: gitDesc || "Git connected repository", language: "Unknown", branch: gitBranch || "main", status: "connected", visibility: gitVis, size: "", last: "Just now", analysisStatus: "Not analyzed" });
     onClose();
   };
 
@@ -1735,12 +1527,12 @@ function UploadModal({ onClose, onRepoAdded, initialTab = "zip" }) {
         <div style={{ padding: "18px 22px 0", borderBottom: `1px solid ${T.border}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <h3 style={{ fontSize: 15, fontWeight: 650, color: T.text, letterSpacing: "-0.02em" }}>Add Repository</h3>
-            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, fontSize: 18, lineHeight: 1 }}>✕</button>
+            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, fontSize: 12, lineHeight: 1 }}>Close</button>
           </div>
           {/* Tabs */}
           <div style={{ display: "flex", gap: 0 }}>
-            <button className="upload-tab" style={tabStyle(tab === "zip")} onClick={() => setTab("zip")}>⬆ Upload ZIP</button>
-            <button className="upload-tab" style={tabStyle(tab === "git")} onClick={() => setTab("git")}>⎇ Connect Git</button>
+            <button className="upload-tab" style={tabStyle(tab === "zip")} onClick={() => setTab("zip")}> Upload ZIP</button>
+            <button className="upload-tab" style={tabStyle(tab === "git")} onClick={() => setTab("git")}>Connect Git</button>
           </div>
         </div>
 
@@ -1771,7 +1563,7 @@ function UploadModal({ onClose, onRepoAdded, initialTab = "zip" }) {
               {progress !== null && (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, color: T.dim }}>{done ? "Upload complete!" : "Uploading…"}</span>
+                    <span style={{ fontSize: 12, color: T.dim }}>{done ? "Upload complete!" : "Uploading"}</span>
                     <span style={{ fontSize: 12, fontFamily: T.mono, color: done ? T.success : T.accentBright }}>{progress}%</span>
                   </div>
                   <div style={{ height: 6, background: T.surfaceEl, borderRadius: 99, overflow: "hidden" }}>
@@ -1817,7 +1609,7 @@ function UploadModal({ onClose, onRepoAdded, initialTab = "zip" }) {
                 <input value={gitDesc} onChange={e => setGitDesc(e.target.value)} placeholder="Brief description..." style={fieldStyle(false)} />
               </div>
               <div style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "10px 14px" }}>
-                <p style={{ fontSize: 12, color: T.faint }}>ℹ️ The repository URL will be stored but <strong style={{ color: T.dim }}>not cloned yet</strong>. Analysis and cloning happen in Phase 3.</p>
+                <p style={{ fontSize: 12, color: T.faint }}> The repository URL will be stored but <strong style={{ color: T.dim }}>not cloned yet</strong>. Analysis and cloning happen in Phase 3.</p>
               </div>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                 <button onClick={onClose} style={{ padding: "8px 16px", background: "none", border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 12, cursor: "pointer" }}>Cancel</button>
@@ -1831,8 +1623,9 @@ function UploadModal({ onClose, onRepoAdded, initialTab = "zip" }) {
   );
 }
 
-/* ─── REPOSITORIES PAGE ──────────────────────────────────────────────────── */
+/*  REPOSITORIES PAGE  */
 function RepositoriesPage({ setActivePage }) {
+  const setSelectedRepository = useCodeScopeUiStore(state => state.setSelectedRepository);
   const [viewState, setViewState] = useState("loaded"); // loading|loaded|empty|error
   const [viewMode, setViewMode] = useState("grid");     // grid|list
   const [repos, setRepos] = useState(MOCK_REPOS);
@@ -1890,19 +1683,19 @@ function RepositoriesPage({ setActivePage }) {
     <div className="page-in" style={{ padding: "28px 32px 48px", maxWidth: 1480, margin: "0 auto" }}>
       <StatePreview />
 
-      {/* ── Page Header ── */}
+      {/*  Page Header  */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 650, color: T.text, letterSpacing: "-0.03em", marginBottom: 4 }}>Repositories</h1>
           <p style={{ fontSize: 13, color: T.faint }}>Manage source code repositories attached to this project. Upload a ZIP or connect a remote Git URL.</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
-          <button onClick={() => openUpload("git")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 12, cursor: "pointer" }}>⎇ Connect Git</button>
-          <button onClick={() => openUpload("zip")} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 16px", background: T.accent, border: "none", borderRadius: T.r6, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>⬆ Upload Repository</button>
+          <button onClick={() => openUpload("git")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 12, cursor: "pointer" }}>Connect Git</button>
+          <button onClick={() => openUpload("zip")} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 16px", background: T.accent, border: "none", borderRadius: T.r6, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Upload Repository</button>
         </div>
       </div>
 
-      {/* ── Stats Strip ── */}
+      {/*  Stats Strip  */}
       {viewState === "loaded" && repos.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
           {[
@@ -1919,7 +1712,7 @@ function RepositoriesPage({ setActivePage }) {
         </div>
       )}
 
-      {/* ── Search + Filter Bar ── */}
+      {/*  Search + Filter Bar  */}
       {viewState === "loaded" && (
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14, marginBottom: 20 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -1928,7 +1721,7 @@ function RepositoriesPage({ setActivePage }) {
               <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.faint }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               </span>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search repositories…" aria-label="Search repositories" style={{ width: "100%", height: 36, background: T.bg, border: `1px solid ${T.borderMid}`, borderRadius: T.r6, color: T.text, padding: "0 12px 0 34px", fontSize: 13, outline: "none" }} />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search repositories" aria-label="Search repositories" style={{ width: "100%", height: 36, background: T.bg, border: `1px solid ${T.borderMid}`, borderRadius: T.r6, color: T.text, padding: "0 12px 0 34px", fontSize: 13, outline: "none" }} />
             </div>
 
             {/* Status filter */}
@@ -1957,16 +1750,16 @@ function RepositoriesPage({ setActivePage }) {
             {/* Sort */}
             <select value={sortBy} onChange={e => setSortBy(e.target.value)} aria-label="Sort by" style={{ height: 36, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, padding: "0 10px", fontSize: 12, outline: "none", cursor: "pointer" }}>
               <option value="newest">Newest</option>
-              <option value="az">A → Z</option>
-              <option value="za">Z → A</option>
+              <option value="az">A  Z</option>
+              <option value="za">Z  A</option>
             </select>
 
             {/* Favorites toggle */}
-            <button onClick={() => setFavOnly(f => !f)} aria-label="Show favorites only" style={{ height: 36, padding: "0 14px", background: favOnly ? T.accentSoft : T.surfaceEl, border: `1px solid ${favOnly ? T.accentBorder : T.border}`, borderRadius: T.r6, color: favOnly ? T.accentBright : T.faint, fontSize: 12, cursor: "pointer", fontWeight: favOnly ? 500 : 400 }}>★ Favorites</button>
+            <button onClick={() => setFavOnly(f => !f)} aria-label="Show favorites only" style={{ height: 36, padding: "0 14px", background: favOnly ? T.accentSoft : T.surfaceEl, border: `1px solid ${favOnly ? T.accentBorder : T.border}`, borderRadius: T.r6, color: favOnly ? T.accentBright : T.faint, fontSize: 12, cursor: "pointer", fontWeight: favOnly ? 500 : 400 }}>Starred Favorites</button>
 
             {/* View toggle */}
             <div style={{ display: "flex", border: `1px solid ${T.border}`, borderRadius: T.r6, overflow: "hidden", flexShrink: 0 }}>
-              {[["grid","▦"],["list","≡"]].map(([mode, icon]) => (
+              {[["grid","Grid"],["list","List"]].map(([mode, icon]) => (
                 <button key={mode} onClick={() => setViewMode(mode)} aria-label={`${mode} view`} style={{ padding: "6px 12px", background: viewMode===mode ? T.accentSoft : T.surfaceEl, border: "none", color: viewMode===mode ? T.accentBright : T.faint, cursor: "pointer", fontSize: 14 }}>{icon}</button>
               ))}
             </div>
@@ -1982,7 +1775,7 @@ function RepositoriesPage({ setActivePage }) {
         </div>
       )}
 
-      {/* ── Content Area ── */}
+      {/*  Content Area  */}
       {viewState === "loading" && (viewMode === "grid" ? <RepoSkeletonGrid /> : <RepoSkeletonList />)}
 
       {viewState === "error" && <RepoErrorState onRetry={() => setViewState("loaded")} />}
@@ -1993,7 +1786,7 @@ function RepositoriesPage({ setActivePage }) {
 
       {viewState === "loaded" && noResults && (
         <div style={{ textAlign: "center", padding: "48px 24px", color: T.faint }}>
-          <div style={{ fontSize: 28, marginBottom: 10 }}>🔍</div>
+          <div style={{ fontSize: 28, marginBottom: 10 }}></div>
           <div style={{ fontSize: 14, fontWeight: 500, color: T.dim, marginBottom: 6 }}>No repositories match your filters</div>
           <button onClick={() => { setSearch(""); setStatusFilter("all"); setLangFilter("all"); setVisFilter("all"); setFavOnly(false); }} style={{ marginTop: 12, fontSize: 12, color: T.accentBright, background: "none", border: "none", cursor: "pointer" }}>Clear filters</button>
         </div>
@@ -2003,7 +1796,7 @@ function RepositoriesPage({ setActivePage }) {
         viewMode === "grid" ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
             {filtered.map(r => (
-              <RepoCard key={r.id} repo={r} isFav={favorites.has(r.id)} onFav={handleFav} onArchive={handleArchive} onDelete={handleDelete} isNew={newIds.has(r.id)} onSelect={() => setActivePage('repo-overview')} />
+              <RepoCard key={r.id} repo={r} isFav={favorites.has(r.id)} onFav={handleFav} onArchive={handleArchive} onDelete={handleDelete} isNew={newIds.has(r.id)} onSelect={() => { setSelectedRepository(r); setActivePage('repo-overview'); }} />
             ))}
           </div>
         ) : (
@@ -2014,13 +1807,13 @@ function RepositoriesPage({ setActivePage }) {
               ))}
             </div>
             {filtered.map(r => (
-              <RepoListRow key={r.id} repo={r} isFav={favorites.has(r.id)} onFav={handleFav} onArchive={handleArchive} onDelete={handleDelete} isNew={newIds.has(r.id)} onSelect={() => setActivePage('repo-overview')} />
+              <RepoListRow key={r.id} repo={r} isFav={favorites.has(r.id)} onFav={handleFav} onArchive={handleArchive} onDelete={handleDelete} isNew={newIds.has(r.id)} onSelect={() => { setSelectedRepository(r); setActivePage('repo-overview'); }} />
             ))}
           </div>
         )
       )}
 
-      {/* ── Upload Modal ── */}
+      {/*  Upload Modal  */}
       {modalOpen && <UploadModal onClose={() => setModalOpen(false)} onRepoAdded={handleRepoAdded} initialTab={modalInitTab} />}
     </div>
   );
@@ -2028,11 +1821,11 @@ function RepositoriesPage({ setActivePage }) {
 
 
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/* 
    REPOSITORY OVERVIEW PAGE
-═══════════════════════════════════════════════════════════════════════════ */
+ */
 
-function RepoOverviewHeader({ repo, setActivePage }) {
+function RepoOverviewHeader({ repo, setActivePage, onAnalyze, analyzing }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32 }}>
       <div style={{ display: "flex", gap: 16 }}>
@@ -2044,22 +1837,22 @@ function RepoOverviewHeader({ repo, setActivePage }) {
             <h1 style={{ fontSize: 24, fontWeight: 600, color: T.text, letterSpacing: "-0.02em", margin: 0 }}>{repo.name}</h1>
             <RepoBadge status={repo.status} />
             <VisibilityBadge vis={repo.visibility} />
-            <button aria-label="Favorite" style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#D29922", fontSize: 18 }}>★</button>
+            <button aria-label="Favorite" style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#D29922", fontSize: 12 }}>Starred</button>
           </div>
           <p style={{ color: T.dim, fontSize: 14, marginBottom: 8, margin: "4px 0 8px 0" }}>{repo.description}</p>
           <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 12, color: T.faint }}>
             <span>Project: {repo.project || "Default Project"}</span>
-            <span>⎇ {repo.branch}</span>
-            <span>🕐 Updated {repo.last}</span>
+            <span> {repo.branch}</span>
+            <span>Updated {repo.last}</span>
           </div>
         </div>
       </div>
       <div style={{ display: "flex", gap: 10 }}>
-        <DashButton variant="ghost" title="Refresh"><span style={{fontSize:16}}>↻</span></DashButton>
+        <DashButton variant="ghost" title="Refresh"><span style={{fontSize:12}}>Refresh</span></DashButton>
         <DashButton variant="secondary" title="Open Settings"><Icons.settings /></DashButton>
         <DashButton variant="secondary" title="Archive"><Icons.archive /></DashButton>
         <DashButton variant="secondary" title="Open Explorer"><Icons.file /></DashButton>
-        <DashButton variant="primary" onClick={() => setActivePage('repo-analysis')}>Analyze Repository</DashButton>
+        <DashButton variant="primary" onClick={onAnalyze} loading={analyzing}>{analyzing ? "Analyzing..." : "Analyze Repository"}</DashButton>
       </div>
     </div>
   );
@@ -2141,9 +1934,20 @@ function RepoOverviewSkeleton() {
 
 function RepoOverviewPage({ setActivePage }) {
   const [status, setStatus] = useState("success"); // "loading" | "error" | "empty" | "success"
+  const queryClient = useQueryClient();
+  const selectedRepositoryId = useCodeScopeUiStore(state => state.selectedRepositoryId);
+  const selectedRepositoryName = useCodeScopeUiStore(state => state.selectedRepositoryName);
+  const startAnalysis = useMutation({
+    mutationFn: () => analysisApi.start(selectedRepositoryId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["analysis", selectedRepositoryId] });
+      setActivePage("repo-analysis");
+    },
+    onError: () => setActivePage("repo-analysis"),
+  });
 
   const repo = { 
-    id: "r1", name: "frontend-platform", project: "Core UI", language: "TypeScript", branch: "main", status: "Healthy", 
+    id: selectedRepositoryId, name: selectedRepositoryName || "main-api", project: "Core UI", language: "TypeScript", branch: "main", status: "Healthy", 
     last: "12 min ago", size: "24.5 MB", visibility: "Private", description: "Core frontend platform monorepo containing shared UI components, state management, and the main application shell.",
     tags: ["frontend", "monorepo", "design-system"]
   };
@@ -2178,7 +1982,12 @@ function RepoOverviewPage({ setActivePage }) {
         <button onClick={() => setStatus("success")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Success</button>
       </div>
 
-      <RepoOverviewHeader repo={repo} setActivePage={setActivePage} />
+      {startAnalysis.isError && (
+        <div style={{ background: `${T.error}12`, border: `1px solid ${T.error}44`, color: T.text, borderRadius: T.r6, padding: 12, marginBottom: 16, fontSize: 13 }}>
+          {friendlyApiError(startAnalysis.error)}
+        </div>
+      )}
+      <RepoOverviewHeader repo={repo} setActivePage={setActivePage} onAnalyze={() => startAnalysis.mutate()} analyzing={startAnalysis.isPending} />
 
       {/* Page-level Search & Filters (Placeholders) */}
       <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
@@ -2328,9 +2137,9 @@ function RepoOverviewPage({ setActivePage }) {
 
 
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/* 
    REPOSITORY EXPLORER PAGE
-═══════════════════════════════════════════════════════════════════════════ */
+ */
 
 const MOCK_FILE_TREE = [
   { id: "root", name: "frontend-platform", type: "folder", fileCount: 1248, children: [
@@ -2362,7 +2171,7 @@ function RepoBreadcrumb({ path, onNavigate }) {
       {path.map((segment, i) => (
         <span key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span onClick={() => onNavigate(segment.id)} style={{ color: i === path.length - 1 ? T.text : T.faint, cursor: "pointer", transition: "color 0.2s" }} className="hover-text">{segment.name}</span>
-          {i < path.length - 1 && <span>›</span>}
+          {i < path.length - 1 && <span>/</span>}
         </span>
       ))}
     </div>
@@ -2392,9 +2201,9 @@ function FolderNode({ node, level, expanded, toggleExpand, onSelect, selectedPat
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <div style={{ width: 14, display: "flex", justifyContent: "center", flexShrink: 0 }}>
-            {isFolder && <span style={{ fontSize: 10, transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.1s" }}>▶</span>}
+            {isFolder && <span style={{ fontSize: 10, transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.1s" }}>{isExpanded ? "v" : ">"}</span>}
           </div>
-          {isFolder ? <span style={{ color: T.warning, flexShrink: 0 }}>📁</span> : <span style={{ color: T.info, flexShrink: 0 }}>📄</span>}
+          {isFolder ? <span style={{ color: T.warning, flexShrink: 0 }}>Folder</span> : <span style={{ color: T.info, flexShrink: 0 }}>File</span>}
           <span style={{ fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{node.name}</span>
         </div>
         {isFolder && <span style={{ fontSize: 11, color: T.faint }}>{node.fileCount}</span>}
@@ -2450,7 +2259,7 @@ function ExplorerFileRow({ file, onClick, isSelected }) {
       className="list-row-hover"
     >
       <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-        {file.type === "folder" ? <span style={{ color: T.warning }}>📁</span> : <span style={{ color: T.info }}>📄</span>}
+        {file.type === "folder" ? <span style={{ color: T.warning }}>Folder</span> : <span style={{ color: T.info }}>File</span>}
         <span style={{ fontSize: 13, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{file.name}</span>
       </div>
       <div style={{ fontSize: 13, color: T.dim, display: "flex", alignItems: "center" }}>{file.type === "file" ? `.${file.name.split('.').pop()}` : "--"}</div>
@@ -2553,12 +2362,12 @@ function FileList({ files, selectedFile, onFileClick, onHeaderClick, sortField, 
   return (
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) 1fr 1fr 1fr 1fr 1fr", gap: 16, padding: "12px 16px", borderBottom: `1px solid ${T.borderMid}`, fontSize: 12, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("name")}>Name {sortField === "name" ? (sortAsc ? "▲" : "▼") : "↕"}</button>
-        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("name")}>Ext ↕</button>
-        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("lang")}>Language {sortField === "lang" ? (sortAsc ? "▲" : "▼") : "↕"}</button>
-        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("size")}>Size {sortField === "size" ? (sortAsc ? "▲" : "▼") : "↕"}</button>
-        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("date")}>Modified ↕</button>
-        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("status")}>Status ↕</button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("name")}>Name {sortField === "name" ? (sortAsc ? "" : "") : ""}</button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("name")}>Ext </button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("lang")}>Language {sortField === "lang" ? (sortAsc ? "" : "") : ""}</button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("size")}>Size {sortField === "size" ? (sortAsc ? "Asc" : "Desc") : "Sort"}</button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("date")}>Modified </button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("status")}>Status </button>
       </div>
       {files.map(item => (
         <FileRow key={item.id} file={item} isSelected={selectedFile?.id === item.id} onClick={onFileClick} />
@@ -2575,7 +2384,7 @@ function ExplorerEmptyState({ onRefresh, onUpload }) {
       <Icons.file size={48} strokeWidth={1} />
       <p style={{ marginTop: 16 }}>No files found</p>
       <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-        <DashButton variant="secondary" onClick={onRefresh}><span style={{fontSize:16}}>â†»</span> Refresh</DashButton>
+        <DashButton variant="secondary" onClick={onRefresh}>Refresh</DashButton>
         <DashButton variant="primary" onClick={onUpload}>Upload Repository</DashButton>
       </div>
     </div>
@@ -2645,7 +2454,7 @@ function FileDetailsPanel({ selectedFile, folderPath, setActivePage }) {
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 24 }}>
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-          <span style={{ color: T.info, fontSize: 24 }}>ðŸ“„</span>
+          <span style={{ color: T.info, fontSize: 14, fontFamily: T.mono }}>FILE</span>
           <h2 style={{ fontSize: 18, fontWeight: 600, color: T.text, margin: 0, wordBreak: "break-all" }}>{selectedFile.name}</h2>
         </div>
         <div style={{ fontSize: 12, color: T.faint, fontFamily: T.mono }}>{fullPath}</div>
@@ -2796,7 +2605,7 @@ function RepoExplorerPage({ setActivePage }) {
       <div style={{ background: T.surface, borderRight: `1px solid ${T.border}`, overflowY: "auto", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
           <RepositorySearch value={searchTerm} onChange={setSearchTerm} inputRef={explorerSearchRef} />
-          <div style={{ marginTop: 8, fontSize: 10, color: T.faint, fontFamily: T.mono }}>Ctrl+F to search · Enter to open · Esc to clear focus</div>
+          <div style={{ marginTop: 8, fontSize: 10, color: T.faint, fontFamily: T.mono }}>Ctrl+F to search - Enter to open - Esc to clear focus</div>
         </div>
         <div style={{ padding: "12px 0", flex: 1 }}>
           <FolderTree 
@@ -2836,19 +2645,19 @@ function RepoExplorerPage({ setActivePage }) {
               <Icons.file size={48} strokeWidth={1} />
               <p style={{ marginTop: 16 }}>No files found in this directory</p>
               <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-                <DashButton variant="secondary" onClick={() => { setSearchTerm(""); setLangFilter("All"); setExtFilter("All"); }}><span style={{fontSize:16}}>↻</span> Reset Filters</DashButton>
+                <DashButton variant="secondary" onClick={() => { setSearchTerm(""); setLangFilter("All"); setExtFilter("All"); }}><span style={{fontSize:12}}>Reset</span> Reset Filters</DashButton>
                 <DashButton variant="primary">Upload Files</DashButton>
               </div>
             </div>
           ) : (
             <div>
               <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) 1fr 1fr 1fr 1fr 1fr", gap: 16, padding: "12px 16px", borderBottom: `1px solid ${T.borderMid}`, fontSize: 12, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("name")}>Name {sortField === "name" ? (sortAsc ? "▲" : "▼") : "↕"}</div>
-                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("name")}>Ext ↕</div>
-                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("lang")}>Language {sortField === "lang" ? (sortAsc ? "▲" : "▼") : "↕"}</div>
-                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("size")}>Size {sortField === "size" ? (sortAsc ? "▲" : "▼") : "↕"}</div>
-                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("date")}>Modified ↕</div>
-                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("status")}>Status ↕</div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("name")}>Name {sortField === "name" ? (sortAsc ? "" : "") : ""}</div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("name")}>Ext </div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("lang")}>Language {sortField === "lang" ? (sortAsc ? "" : "") : ""}</div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("size")}>Size {sortField === "size" ? (sortAsc ? "" : "") : ""}</div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("date")}>Modified </div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("status")}>Status </div>
               </div>
               {listData.map(item => (
                 <ExplorerFileRow 
@@ -2876,7 +2685,7 @@ function RepoExplorerPage({ setActivePage }) {
           <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 24 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                <span style={{ color: T.info, fontSize: 24 }}>📄</span>
+                <span style={{ color: T.info, fontSize: 12, fontWeight: 700 }}>File</span>
                 <h2 style={{ fontSize: 18, fontWeight: 600, color: T.text, margin: 0, wordBreak: "break-all" }}>{selectedFile.name}</h2>
               </div>
               <div style={{ fontSize: 12, color: T.faint, fontFamily: T.mono }}>{folderPath.map(f=>f.name).join(' / ')} / {selectedFile.name}</div>
@@ -2928,9 +2737,9 @@ function RepoExplorerPage({ setActivePage }) {
 
 
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/* 
    REPOSITORY ANALYSIS PAGE
-═══════════════════════════════════════════════════════════════════════════ */
+ */
 
 function LanguageChart({ languages }) {
   return (
@@ -3156,7 +2965,7 @@ function ScanProgressTimeline({ currentStep, steps, status }) {
   );
 }
 
-function RepoAnalysisPage({ setActivePage }) {
+function RepoAnalysisPageLegacy({ setActivePage }) {
   const [status, setStatus] = useState("completed"); // "loading" | "running" | "completed" | "failed" | "empty" | "error"
   const [searchTerm, setSearchTerm] = useState("");
   const [analysisFilters, setAnalysisFilters] = useState({ search: "", analysisType: "All", folder: "All", fileType: "All" });
@@ -3381,9 +3190,335 @@ function RepoAnalysisPage({ setActivePage }) {
 
 
 
-/* ═══════════════════════════════════════════════════════════════════════════
+const formatCount = value => Number(value || 0).toLocaleString();
+const formatBytes = value => {
+  const size = Number(value || 0);
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${size} B`;
+};
+const formatDateTime = value => value ? new Date(value).toLocaleString() : "Not available";
+const analysisStepForStatus = status => {
+  if (status === "pending") return 0;
+  if (status === "running") return 4;
+  if (status === "completed" || status === "completed_with_warnings") return 6;
+  if (status === "failed" || status === "cancelled") return 2;
+  return 0;
+};
+const isAnalysisComplete = status => status === "completed" || status === "completed_with_warnings";
+
+function RepoAnalysisPage({ setActivePage }) {
+  const queryClient = useQueryClient();
+  const repositoryId = useCodeScopeUiStore(state => state.selectedRepositoryId);
+  const repositoryName = useCodeScopeUiStore(state => state.selectedRepositoryName);
+  const [analysisFilters, setAnalysisFilters] = useState({ search: "", analysisType: "Functions", folder: "All", fileType: "All" });
+  const [selectedLanguage, setSelectedLanguage] = useState("All");
+  const [sortFuncField, setSortFuncField] = useState("lines");
+  const [sortClassField, setSortClassField] = useState("methods");
+
+  const startAnalysis = useMutation({
+    mutationFn: () => analysisApi.start(repositoryId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["analysis", repositoryId] });
+      setAnalysisFilters(prev => ({ ...prev, analysisType: "Functions" }));
+    },
+  });
+
+  const statusQuery = useQuery({
+    queryKey: ["analysis", repositoryId, "status"],
+    queryFn: () => analysisApi.status(repositoryId),
+    enabled: Boolean(repositoryId) && !startAnalysis.isPending,
+    refetchInterval: query => {
+      const status = query.state.data?.status;
+      return status === "pending" || status === "running" ? 1000 : false;
+    },
+    retry: 1,
+  });
+
+  const runStatus = startAnalysis.isPending ? "running" : statusQuery.data?.status;
+  const reportQuery = useQuery({
+    queryKey: ["analysis", repositoryId, "report"],
+    queryFn: () => analysisApi.report(repositoryId),
+    enabled: Boolean(repositoryId) && isAnalysisComplete(runStatus),
+  });
+  const metricsQuery = useQuery({
+    queryKey: ["analysis", repositoryId, "metrics"],
+    queryFn: () => analysisApi.metrics(repositoryId),
+    enabled: Boolean(repositoryId) && isAnalysisComplete(runStatus),
+  });
+
+  const search = analysisFilters.search || undefined;
+  const loadFunctions = isAnalysisComplete(runStatus) && analysisFilters.analysisType === "Functions";
+  const loadClasses = isAnalysisComplete(runStatus) && analysisFilters.analysisType === "Classes";
+  const loadModules = isAnalysisComplete(runStatus) && analysisFilters.analysisType === "Modules";
+  const loadImports = isAnalysisComplete(runStatus) && analysisFilters.analysisType === "Imports";
+
+  const functionsQuery = useQuery({
+    queryKey: ["analysis", repositoryId, "functions", search],
+    queryFn: () => analysisApi.functions(repositoryId, { search, limit: 100 }),
+    enabled: loadFunctions,
+  });
+  const classesQuery = useQuery({
+    queryKey: ["analysis", repositoryId, "classes", search],
+    queryFn: () => analysisApi.classes(repositoryId, { search, limit: 100 }),
+    enabled: loadClasses,
+  });
+  const modulesQuery = useQuery({
+    queryKey: ["analysis", repositoryId, "modules", search],
+    queryFn: () => analysisApi.modules(repositoryId, { search, limit: 100 }),
+    enabled: loadModules,
+  });
+  const importsQuery = useQuery({
+    queryKey: ["analysis", repositoryId, "imports", search],
+    queryFn: () => analysisApi.imports(repositoryId, { search, limit: 100 }),
+    enabled: loadImports,
+  });
+
+  const primaryError = startAnalysis.error || statusQuery.error || reportQuery.error || metricsQuery.error;
+  const metrics = metricsQuery.data || reportQuery.data?.metrics;
+  const run = statusQuery.data || reportQuery.data?.run || startAnalysis.data;
+  const languages = (reportQuery.data?.languages || []).map(lang => ({
+    name: lang.language,
+    percent: Math.round(lang.percentage || 0),
+    files: lang.file_count,
+    loc: lang.lines_of_code,
+  }));
+  const repoMeta = {
+    name: repositoryName || repositoryId || "Repository",
+    version: `run ${run?.id?.slice?.(0, 8) || "pending"}`,
+    duration: run?.duration_ms ? `${(run.duration_ms / 1000).toFixed(1)} seconds` : "In progress",
+    completedAt: formatDateTime(run?.completed_at),
+    startedAt: formatDateTime(run?.started_at),
+  };
+
+  const mappedFunctions = (functionsQuery.data?.items || []).map(item => ({
+    name: item.name,
+    file: item.file_path,
+    visibility: item.visibility,
+    lines: Math.max(1, (item.end_line || item.start_line || 0) - (item.start_line || 0) + 1),
+    complexity: item.is_async ? "Medium" : "Low",
+    params: item.parameters?.length || 0,
+    returnType: item.return_type || "Unknown",
+  })).sort((a, b) => (b[sortFuncField] || 0) - (a[sortFuncField] || 0));
+  const mappedClasses = (classesQuery.data?.items || []).map(item => ({
+    name: item.name,
+    file: item.file_path,
+    methods: 0,
+    properties: 0,
+    inheritance: item.bases?.join(", ") || "None",
+  })).sort((a, b) => (b[sortClassField] || 0) - (a[sortClassField] || 0));
+  const mappedModules = (modulesQuery.data?.items || []).map(item => ({
+    name: item.name,
+    files: 1,
+    functions: 0,
+    classes: 0,
+    exports: item.is_package ? 1 : 0,
+    imports: 0,
+  }));
+  const importRows = importsQuery.data?.items || [];
+  const importSummary = {
+    totalImportCount: importsQuery.data?.total || metrics?.imports || 0,
+    mostImported: importRows.slice(0, 8).map(item => ({ file: item.imported_name ? `${item.module}.${item.imported_name}` : item.module, count: 1 })),
+    internal: importRows.filter(item => item.level > 0).map(item => item.module).slice(0, 12),
+    external: importRows.filter(item => item.level === 0).map(item => item.module).slice(0, 12),
+  };
+  const warnings = run?.warnings || [];
+  const running = startAnalysis.isPending || runStatus === "pending" || runStatus === "running";
+
+  if (!repositoryId) {
+    return <AnalysisEmptyState title="No repository selected" detail="Choose a repository before opening analysis." action="Open Repositories" onAction={() => setActivePage("repos")} />;
+  }
+
+  if (statusQuery.isLoading && !startAnalysis.isPending) {
+    return <AnalysisLoadingSkeleton />;
+  }
+
+  if (primaryError && !isAnalysisComplete(runStatus)) {
+    return (
+      <AnalysisErrorState
+        title="Unable to load repository analysis"
+        detail={friendlyApiError(primaryError)}
+        onRetry={() => {
+          statusQuery.refetch();
+          reportQuery.refetch();
+          metricsQuery.refetch();
+        }}
+        onRun={() => startAnalysis.mutate()}
+        running={startAnalysis.isPending}
+      />
+    );
+  }
+
+  if (!running && !isAnalysisComplete(runStatus)) {
+    return <AnalysisEmptyState title="No analysis data available" detail="Run analysis to scan the uploaded repository and populate metrics." action="Run Analysis" onAction={() => startAnalysis.mutate()} running={startAnalysis.isPending} />;
+  }
+
+  if (running) {
+    return (
+      <div style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
+        <AnalysisHeader repo={repoMeta} onReanalyze={() => startAnalysis.mutate()} onDownload={() => {}} status="running" />
+        <ScanProgressTimeline currentStep={analysisStepForStatus(runStatus)} steps={ANALYSIS_STEPS} status="running" />
+        <div style={{ marginTop: 24, textAlign: "center", padding: 48, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8 }}>
+          <div style={{ fontSize: 16, color: T.text, marginBottom: 8 }}>Repository analysis is running</div>
+          <div style={{ fontSize: 13, color: T.faint }}>Scanning files, parsing Python AST metadata, and calculating repository metrics.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-in" style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
+      <AnalysisHeader repo={repoMeta} onReanalyze={() => startAnalysis.mutate()} onDownload={() => {}} status={runStatus === "completed_with_warnings" ? "paused" : "completed"} />
+      <ProgressTimeline currentStep={analysisStepForStatus(runStatus)} steps={ANALYSIS_STEPS} status="completed" />
+
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 16, marginTop: 0 }}>Codebase Aggregates</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+        <SummaryCard label="Total Files" value={formatCount(metrics?.total_files)} />
+        <SummaryCard label="Total Folders" value={formatCount(metrics?.total_folders)} />
+        <SummaryCard label="Total LOC" value={formatCount(metrics?.lines_of_code)} sub="Lines of code" />
+        <SummaryCard label="Languages Detected" value={formatCount(metrics?.languages)} />
+        <SummaryCard label="Modules" value={formatCount(metrics?.modules)} />
+        <SummaryCard label="Packages" value={formatCount(metrics?.packages)} />
+        <SummaryCard label="Functions" value={formatCount(metrics?.functions)} />
+        <SummaryCard label="Classes" value={formatCount(metrics?.classes)} />
+        <SummaryCard label="Imports" value={formatCount(metrics?.imports)} />
+        <SummaryCard label="Largest File" value={metrics?.largest_file_path || "None"} sub={formatBytes(metrics?.largest_file_size)} />
+        <SummaryCard label="Largest Folder" value={metrics?.largest_folder_path || "Root"} sub={formatBytes(metrics?.largest_folder_size)} />
+        <SummaryCard label="Warnings" value={formatCount(run?.warnings?.length || run?.errors_count)} />
+      </div>
+
+      <AnalysisFilters filters={analysisFilters} setFilters={setAnalysisFilters} selectedLanguage={selectedLanguage} setSelectedLanguage={setSelectedLanguage} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 24 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <LanguageChart languages={languages} />
+          <LiveFolderMetrics metrics={metrics} />
+          <LiveFileMetrics metrics={metrics} />
+          {analysisFilters.analysisType === "Modules" && <ModuleTableWidget modules={mappedModules} />}
+          <WidgetShell title="Analysis Warnings">
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {warnings.length === 0 && <div style={{ color: T.faint, fontSize: 13 }}>No warnings reported by the backend analysis run.</div>}
+              {warnings.map((warning, idx) => <WarningCard key={idx} warning={{ type: warning.type || "Analysis Warning", message: warning.message || JSON.stringify(warning), level: warning.level || "warning" }} />)}
+            </div>
+          </WidgetShell>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <AnalysisEntityTabs active={analysisFilters.analysisType} onChange={value => setAnalysisFilters(prev => ({ ...prev, analysisType: value }))} />
+          {analysisFilters.analysisType === "Functions" && (functionsQuery.isLoading ? <AnalysisPanelSkeleton title="Function Analysis" /> : <FunctionTable functions={mappedFunctions} sortFuncField={sortFuncField} setSortFuncField={setSortFuncField} />)}
+          {analysisFilters.analysisType === "Classes" && (classesQuery.isLoading ? <AnalysisPanelSkeleton title="Class Analysis" /> : <ClassTable classes={mappedClasses} sortClassField={sortClassField} setSortClassField={setSortClassField} />)}
+          {analysisFilters.analysisType === "Modules" && (modulesQuery.isLoading ? <AnalysisPanelSkeleton title="Module Analysis" /> : <ModuleTableWidget modules={mappedModules} />)}
+          {analysisFilters.analysisType === "Imports" && (importsQuery.isLoading ? <AnalysisPanelSkeleton title="Import Analysis" /> : <ImportTableWidget imports={importSummary} />)}
+          <WidgetShell title="AI Recommendations">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <RecommendationCard title="Explore Architecture" desc="Inspect system diagrams." onClick={() => setActivePage('arch')} />
+              <RecommendationCard title="View Dependencies" desc="Trace imports and downstream dependencies." onClick={() => setActivePage('deps')} />
+              <RecommendationCard title="Open Repository" desc="Return to repository overview." onClick={() => setActivePage('repo-overview')} />
+              <RecommendationCard title="Browse Files" desc="Inspect analyzed source files." onClick={() => setActivePage('repo-explorer')} />
+            </div>
+          </WidgetShell>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnalysisEntityTabs({ active, onChange }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+      {["Functions", "Classes", "Modules", "Imports"].map(label => (
+        <button key={label} onClick={() => onChange(label)} style={{ padding: "8px 10px", background: active === label ? T.accentSoft : T.surfaceEl, border: `1px solid ${active === label ? T.accentBorder : T.border}`, borderRadius: T.r6, color: active === label ? T.accentBright : T.dim, cursor: "pointer", fontSize: 12 }}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function LiveFolderMetrics({ metrics }) {
+  return (
+    <WidgetShell title="Folder Metrics">
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13 }}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Largest Folder</span><span style={{ color: T.text, fontFamily: T.mono }}>{metrics?.largest_folder_path || "Root"}</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Largest Folder Size</span><span style={{ color: T.text }}>{formatBytes(metrics?.largest_folder_size)}</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Total Folders</span><span style={{ color: T.text }}>{formatCount(metrics?.total_folders)}</span></div>
+      </div>
+    </WidgetShell>
+  );
+}
+
+function LiveFileMetrics({ metrics }) {
+  return (
+    <WidgetShell title="File Metrics">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 13 }}>
+        {[
+          ["Largest File", metrics?.largest_file_path || "None"],
+          ["Largest File Size", formatBytes(metrics?.largest_file_size)],
+          ["Total Files", formatCount(metrics?.total_files)],
+          ["Lines of Code", formatCount(metrics?.lines_of_code)],
+          ["Parsed Modules", formatCount(metrics?.modules)],
+          ["Imports", formatCount(metrics?.imports)],
+        ].map(([label, value]) => (
+          <div key={label} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 10 }}>
+            <div style={{ color: T.faint, fontSize: 11, marginBottom: 4 }}>{label}</div>
+            <div style={{ color: T.text, fontFamily: T.mono, fontSize: 13 }}>{value}</div>
+          </div>
+        ))}
+      </div>
+    </WidgetShell>
+  );
+}
+
+function AnalysisLoadingSkeleton() {
+  return (
+    <div style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
+      <div style={{ height: 40, width: 260, background: T.surfaceEl, borderRadius: T.r4, marginBottom: 24 }} className="skeleton-pulse" />
+      <div style={{ height: 120, background: T.surfaceEl, borderRadius: T.r6, marginBottom: 24 }} className="skeleton-pulse" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+        {[1,2,3,4,5,6,7,8].map(i => <div key={i} style={{ height: 90, background: T.surfaceEl, borderRadius: T.r6 }} className="skeleton-pulse" />)}
+      </div>
+    </div>
+  );
+}
+
+function AnalysisPanelSkeleton({ title }) {
+  return (
+    <WidgetShell title={title}>
+      <div style={{ display: "grid", gap: 8 }}>
+        {[1,2,3,4].map(i => <div key={i} className="skeleton-pulse" style={{ height: 34, background: T.surfaceEl, borderRadius: T.r4 }} />)}
+      </div>
+    </WidgetShell>
+  );
+}
+
+function AnalysisErrorState({ title, detail, onRetry, onRun, running }) {
+  return (
+    <div style={{ padding: "32px 36px", maxWidth: 760, margin: "0 auto", textAlign: "center" }}>
+      <Icons.error size={48} stroke={T.error} />
+      <h2 style={{ color: T.text, marginTop: 16 }}>{title}</h2>
+      <p style={{ color: T.dim, marginTop: 8, lineHeight: 1.5 }}>{detail}</p>
+      <div style={{ display: "flex", justifyContent: "center", gap: 12, marginTop: 24 }}>
+        <DashButton variant="secondary" onClick={onRetry}>Retry</DashButton>
+        <DashButton variant="primary" onClick={onRun}>{running ? "Running..." : "Run Analysis"}</DashButton>
+      </div>
+    </div>
+  );
+}
+
+function AnalysisEmptyState({ title, detail, action, onAction, running }) {
+  return (
+    <div style={{ padding: "32px 36px", maxWidth: 760, margin: "0 auto", textAlign: "center" }}>
+      <Icons.file size={48} />
+      <h2 style={{ color: T.text, marginTop: 16 }}>{title}</h2>
+      <p style={{ color: T.dim, marginTop: 8, lineHeight: 1.5 }}>{detail}</p>
+      <DashButton variant="primary" style={{ marginTop: 24, margin: "24px auto 0" }} onClick={onAction}>{running ? "Running..." : action}</DashButton>
+    </div>
+  );
+}
+
+/* 
    PROMPT 9: KNOWLEDGE GRAPH EXPLORER (FULL COMPLIANCE)
-═══════════════════════════════════════════════════════════════════════════ */
+ */
 
 const graphMockData = {
   nodes: [
@@ -4081,7 +4216,7 @@ const StatRow = ({ label, val }) => (
   </div>
 );
 
-/* ─── KNOWLEDGE GRAPH STATES ─────────────────────────────────────────────── */
+/*  KNOWLEDGE GRAPH STATES  */
 function GraphLoadingState() {
   return (
     <div className="knowledge-layout" style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 320px", height: "100%", overflow: "hidden" }}>
@@ -4145,12 +4280,1097 @@ function GraphRunningState() {
   return <GraphLoadingState />;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════ */
+/* 
+   PROMPT 11: ARCHITECTURE EXPLORER
+ */
+
+const archLayerColors = {
+  "Presentation Layer": T.info,
+  "Business Layer": T.warning,
+  "Data Layer": T.success,
+  "Infrastructure Layer": T.accentBright,
+  "External Services": "#a371f7",
+};
+
+function architectureEdgeStyle(label, isActive, isDimmed) {
+  const palette = {
+    calls: [T.info, "0", true],
+    reads: [T.success, "4 2", false],
+    writes: [T.warning, "0", true],
+    publishes: ["#a371f7", "3 3", true],
+    consumes: ["#f771a3", "3 3", true],
+    authenticates: [T.accentBright, "6 2", true],
+    stores: [T.success, "1 4", false],
+    caches: [T.accent, "2 3", true],
+    triggers: [T.warning, "6 2", true],
+    "depends on": [T.error, "2 4", false],
+    imports: [T.faint, "5 5", false],
+  };
+  const [color, dash, animated] = palette[label] || [T.dim, "0", false];
+  return {
+    animated: isActive || animated,
+    markerEnd: { type: MarkerType.ArrowClosed, color },
+    style: { stroke: color, strokeDasharray: dash, strokeWidth: isActive ? 3 : 1.4, opacity: isDimmed ? 0.13 : 1 },
+  };
+}
+
+function ArchitectureNode({ data, selected }) {
+  const color = archLayerColors[data.layer] || T.dim;
+  return (
+    <div aria-label={`${data.type}: ${data.label}`} style={{ minWidth: 168, background: T.surface, border: `1px solid ${selected ? T.text : color}`, borderRadius: T.r8, boxShadow: selected ? `0 0 0 3px ${T.accentSoft}` : T.shadow, opacity: data.hidden ? 0.2 : 1, overflow: "hidden" }}>
+      <Handle type="target" position={Position.Left} style={{ background: color, border: "none" }} />
+      <div style={{ height: 4, background: color }} />
+      <div style={{ padding: 12, display: "grid", gap: 5 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+          <span style={{ color: T.text, fontSize: 13, fontWeight: 650, fontFamily: T.mono }}>{data.label}</span>
+          <span style={{ width: 8, height: 8, borderRadius: 999, background: color, marginTop: 4 }} />
+        </div>
+        <div style={{ color: T.dim, fontSize: 11 }}>{data.type}</div>
+        {!data.hideLayer && <div style={{ color: T.faint, fontSize: 10 }}>{data.layer}</div>}
+      </div>
+      <Handle type="source" position={Position.Right} style={{ background: color, border: "none" }} />
+    </div>
+  );
+}
+
+const architectureNodeTypes = { architecture: ArchitectureNode };
+
+function ArchitectureEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style = {}, markerEnd, data }) {
+  const [edgePath, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, borderRadius: 18 });
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
+      <EdgeLabelRenderer>
+        <div style={{ position: "absolute", transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: "none", background: T.surface, border: `1px solid ${T.border}`, color: data?.active ? T.text : T.dim, borderRadius: 999, padding: "2px 7px", fontSize: 10, fontFamily: T.mono, boxShadow: data?.active ? T.shadow : "none" }}>
+          {data?.label}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+const architectureEdgeTypes = { architecture: ArchitectureEdge };
+
+function ArchitectureSearch({ value, onChange }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <span style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></span>
+      <input aria-label="Search architecture" value={value} onChange={e => onChange(e.target.value)} placeholder="Search services, routes, databases..." style={{ width: "100%", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, padding: "7px 10px 7px 32px", outline: "none", fontSize: 13 }} />
+    </div>
+  );
+}
+
+function ArchitectureFilters({ filters, setFilters }) {
+  const selectStyle = { width: "100%", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.text, padding: 7, fontSize: 12, outline: "none" };
+  const set = (key, value) => setFilters({ ...filters, [key]: value });
+  return (
+    <section style={{ padding: 16, borderBottom: `1px solid ${T.border}`, display: "grid", gap: 10 }}>
+      <h3 style={{ fontSize: 13, color: T.text, margin: 0 }}>Architecture Filters</h3>
+      <ArchitectureSearch value={filters.search} onChange={value => set("search", value)} />
+      {[
+        ["layer", "Layer", ["All", "Presentation Layer", "Business Layer", "Data Layer", "Infrastructure Layer", "External Services"]],
+        ["language", "Language", ["All", "TypeScript", "Go", "SQL", "Redis", "Python", "HTTPS", "YAML", "ENV"]],
+        ["framework", "Framework", ["All", "React", "Express", "NestJS", "Node", "JWT", "Prisma", "PostgreSQL", "Redis", "RabbitMQ", "Docker", "Runtime"]],
+        ["nodeType", "Node Type", ["All", "Frontend", "Backend", "API Gateway", "Module", "Route", "Controller", "Service", "Repository", "Database", "Redis Cache", "Message Queue", "External APIs", "Auth", "Worker", "Scheduler", "Storage", "Configuration", "Environment"]],
+        ["relationship", "Relationship", ["All", "calls", "reads", "writes", "publishes", "consumes", "authenticates", "stores", "caches", "triggers", "depends on", "imports"]],
+        ["visibility", "Visibility", ["All", "Public", "Internal", "Private", "External"]],
+      ].map(([key, label, options]) => (
+        <label key={key} style={{ display: "grid", gap: 4, color: T.dim, fontSize: 11 }}>
+          {label}
+          <select aria-label={`Filter by ${label}`} value={filters[key]} onChange={e => set(key, e.target.value)} style={selectStyle}>
+            {options.map(option => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </label>
+      ))}
+    </section>
+  );
+}
+
+function LayerSwitcher({ level, setLevel, collapsedLayers, toggleLayer }) {
+  return (
+    <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+      <h3 style={{ fontSize: 12, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 10px" }}>Architecture Levels</h3>
+      <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
+        {architectureMockData.levels.map(item => (
+          <button key={item} onClick={() => setLevel(item)} style={{ textAlign: "left", padding: "7px 9px", borderRadius: T.r4, border: `1px solid ${level === item ? T.accentBorder : T.border}`, background: level === item ? T.accentSoft : T.surfaceEl, color: level === item ? T.accentBright : T.dim, cursor: "pointer", fontSize: 12 }}>{item}</button>
+        ))}
+      </div>
+      <h3 style={{ fontSize: 12, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 10px" }}>Layers</h3>
+      <div style={{ display: "grid", gap: 6 }}>
+        {Object.entries(archLayerColors).map(([layerName, color]) => (
+          <button key={layerName} onClick={() => toggleLayer(layerName)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "7px 9px", borderRadius: T.r4, border: `1px solid ${T.border}`, background: collapsedLayers.has(layerName) ? T.bg : T.surfaceEl, color: collapsedLayers.has(layerName) ? T.faint : T.text, cursor: "pointer", fontSize: 12 }}>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: color, marginRight: 7 }} />{layerName}</span>
+            <span>{collapsedLayers.has(layerName) ? "Collapsed" : "Visible"}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FlowSimulator({ activeFlow, setActiveFlow }) {
+  const labels = { login: "Login API", checkout: "Checkout", session: "Session Check" };
+  return (
+    <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+      <h3 style={{ fontSize: 12, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 10px" }}>Request Flow Simulation</h3>
+      <div style={{ display: "grid", gap: 7 }}>
+        {Object.keys(architectureMockData.flows).map(flow => (
+          <button key={flow} onClick={() => setActiveFlow(activeFlow === flow ? null : flow)} style={{ padding: "8px 10px", borderRadius: T.r6, border: `1px solid ${activeFlow === flow ? T.accentBorder : T.border}`, background: activeFlow === flow ? T.accentSoft : T.surfaceEl, color: activeFlow === flow ? T.accentBright : T.text, textAlign: "left", cursor: "pointer", fontSize: 12 }}>{labels[flow]}</button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ArchitectureToolbar({ fitView, reset, focusMode, setFocusMode, fullscreen, setFullscreen, autoLayout }) {
+  return (
+    <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, display: "flex", gap: 8, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "6px 8px", boxShadow: T.shadow, whiteSpace: "nowrap" }}>
+      <button aria-label="Auto layout" onClick={autoLayout} style={archToolButton}>Auto Layout</button>
+      <button aria-label="Fit view" onClick={fitView} style={archToolButton}>Fit View</button>
+      <button aria-label="Toggle focus mode" onClick={() => setFocusMode(!focusMode)} style={{ ...archToolButton, color: focusMode ? T.accentBright : T.text }}>Focus Mode</button>
+      <button aria-label="Toggle fullscreen" onClick={() => setFullscreen(!fullscreen)} style={{ ...archToolButton, color: fullscreen ? T.accentBright : T.text }}>Fullscreen</button>
+      <button aria-label="Reset graph" onClick={reset} style={archToolButton}>Reset</button>
+    </div>
+  );
+}
+const archToolButton = { padding: "4px 8px", background: "none", color: T.text, border: "none", cursor: "pointer", fontSize: 12 };
+
+function MiniMapControls() {
+  return (
+    <>
+      <Controls style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, overflow: "hidden" }} />
+      <MiniMap nodeColor={node => archLayerColors[node.data.layer] || T.dim} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6 }} maskColor="rgba(0,0,0,0.55)" />
+    </>
+  );
+}
+
+function ArchitectureCanvas({ nodes, edges, onNodesChange, onEdgesChange, onNodeClick, onPaneClick }) {
+  return (
+    <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeClick={onNodeClick} onPaneClick={onPaneClick} nodeTypes={architectureNodeTypes} edgeTypes={architectureEdgeTypes} fitView theme="dark" attributionPosition="bottom-right">
+      <Background color={T.border} gap={24} size={1} />
+      <MiniMapControls />
+    </ReactFlow>
+  );
+}
+
+function ArchitectureNodeInspector({ node, nodes, edges, setActivePage, expandedNodeIds, toggleExpand }) {
+  if (!node) return <ArchitectureStatisticsPanel />;
+  const incoming = edges.filter(edge => edge.target === node.id);
+  const outgoing = edges.filter(edge => edge.source === node.id);
+  const related = id => nodes.find(nodeItem => nodeItem.id === id)?.data.label || id;
+  return (
+    <aside style={{ padding: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+        <span style={{ width: 36, height: 36, borderRadius: T.r6, background: T.surfaceEl, border: `1px solid ${archLayerColors[node.data.layer]}`, display: "grid", placeItems: "center" }}><Icons.arch /></span>
+        <div>
+          <div style={{ color: T.text, fontSize: 15, fontWeight: 650, fontFamily: T.mono }}>{node.data.label}</div>
+          <div style={{ color: T.dim, fontSize: 12 }}>{node.data.type}  {node.data.layer}</div>
+        </div>
+      </div>
+      <p style={{ color: T.dim, fontSize: 13, lineHeight: 1.5, marginBottom: 18 }}>{node.data.description}</p>
+      <InfoBlock rows={[["Repository Path", node.data.path], ["Language", node.data.lang], ["Framework", node.data.framework], ["Visibility", node.data.visibility]]} />
+      <InspectorList title={`Incoming Connections (${incoming.length})`} items={incoming.map(edge => `${related(edge.source)}  ${edge.label}`)} />
+      <InspectorList title={`Outgoing Connections (${outgoing.length})`} items={outgoing.map(edge => `${edge.label}  ${related(edge.target)}`)} />
+      <InspectorList title="Related Files" items={node.data.files || []} />
+      <InspectorList title="Related APIs" items={node.data.apis || []} />
+      <InspectorList title="Related Services" items={node.data.services || []} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 18 }}>
+        <DashButton icon={Icons.file} label="Open Source" variant="secondary" onClick={() => setActivePage("repo-explorer")} />
+        <DashButton icon={Icons.deps} label="Dependencies" variant="secondary" onClick={() => setActivePage("deps")} />
+        <DashButton icon={Icons.graph} label={expandedNodeIds.has(node.id) ? "Collapse Node" : "Expand Node"} variant="secondary" onClick={() => toggleExpand(node.id)} />
+        <DashButton icon={Icons.impact} label="Analysis" variant="secondary" onClick={() => setActivePage("repo-analysis")} style={{ gridColumn: "1 / -1" }} />
+      </div>
+    </aside>
+  );
+}
+
+function InfoBlock({ rows }) {
+  return (
+    <div style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 12, display: "grid", gap: 8, marginBottom: 18 }}>
+      {rows.map(([label, value]) => <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12 }}><span style={{ color: T.faint }}>{label}</span><span style={{ color: T.text, fontFamily: T.mono, textAlign: "right", wordBreak: "break-word" }}>{value}</span></div>)}
+    </div>
+  );
+}
+
+function InspectorList({ title, items }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ color: T.dim, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>{title}</div>
+      <div style={{ display: "grid", gap: 6 }}>
+        {items.length ? items.map(item => <div key={item} style={{ background: T.surfaceEl, borderRadius: T.r4, padding: "6px 8px", color: T.text, fontSize: 12, fontFamily: T.mono }}>{item}</div>) : <div style={{ color: T.faint, fontSize: 12 }}>None</div>}
+      </div>
+    </div>
+  );
+}
+
+function ArchitectureStatisticsPanel() {
+  const allNodes = architectureMockData.nodes;
+  const totalApis = allNodes.reduce((sum, node) => sum + (node.data.apis || []).length, 0);
+  const avgConnections = (architectureMockData.edges.length / Math.max(allNodes.length, 1)).toFixed(1);
+  const countType = types => allNodes.filter(node => types.includes(node.data.type)).length;
+  const stats = [
+    ["Total Services", countType(["Service"])],
+    ["Total APIs", totalApis],
+    ["Total Controllers", countType(["Controller"])],
+    ["Total Databases", countType(["Database", "Redis Cache"])],
+    ["External Integrations", countType(["External APIs", "Storage"])],
+    ["Architecture Layers", Object.keys(archLayerColors).length],
+    ["Dependency Count", architectureMockData.edges.length],
+    ["Average Connections", avgConnections],
+  ];
+  return <aside style={{ padding: 20 }}><h3 style={{ color: T.text, fontSize: 14, marginBottom: 16 }}>Architecture Statistics</h3><div style={{ display: "grid", gap: 10 }}>{stats.map(([label, value]) => <StatRow key={label} label={label} val={value} />)}</div></aside>;
+}
+
+function HealthCards() {
+  return (
+    <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+      <h3 style={{ fontSize: 12, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 10px" }}>Architecture Health</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        {[["Layer Coupling", "Medium", T.warning], ["Circular Deps", "2", T.error], ["Unused Services", "3", T.info], ["Service Density", "Healthy", T.success], ["Complexity", "High", T.warning], ["Risk Score", "Medium", T.warning]].map(([label, value, color]) => (
+          <div key={label} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 10 }}>
+            <div style={{ color: T.faint, fontSize: 10 }}>{label}</div>
+            <div style={{ color, fontSize: 13, fontWeight: 650, marginTop: 4 }}>{value}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ArchitectureLegend() {
+  return (
+    <section style={{ padding: 16 }}>
+      <h3 style={{ fontSize: 12, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 10px" }}>Legend</h3>
+      <div style={{ display: "grid", gap: 8, fontSize: 12 }}>
+        {Object.entries(archLayerColors).map(([label, color]) => <div key={label} style={{ color: T.dim }}><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: color, marginRight: 8 }} />{label}</div>)}
+        {["calls", "reads", "writes", "publishes", "consumes", "authenticates", "stores", "caches", "triggers", "depends on", "imports"].map(rel => <div key={rel} style={{ color: T.faint }}>{rel}</div>)}
+      </div>
+    </section>
+  );
+}
+
+function ArchitectureQuickNav({ setActivePage }) {
+  return (
+    <section style={{ padding: 16, borderTop: `1px solid ${T.border}` }}>
+      <h3 style={{ fontSize: 12, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 10px" }}>Quick Navigation</h3>
+      <div style={{ display: "grid", gap: 7 }}>
+        {[["Repository Explorer", "repo-explorer"], ["Repository Analysis", "repo-analysis"], ["Dependency Explorer", "deps"], ["Git Timeline", "git"], ["Impact Analysis", "impact"]].map(([label, page]) => <button key={page} onClick={() => setActivePage(page)} style={{ textAlign: "left", padding: "7px 9px", borderRadius: T.r4, border: `1px solid ${T.border}`, background: T.surfaceEl, color: T.text, cursor: "pointer", fontSize: 12 }}>{label}</button>)}
+      </div>
+    </section>
+  );
+}
+
+function ArchitectureLoadingSkeleton() {
+  return <div style={{ display: "grid", gridTemplateColumns: "300px 1fr 340px", height: "100%" }}><div className="dash-skeleton" style={{ margin: 16 }} /><div style={{ display: "grid", placeItems: "center" }}><GraphLoadingState /></div><div className="dash-skeleton" style={{ margin: 16 }} /></div>;
+}
+
+function ArchitectureEmptyState({ onRun }) {
+  return <div style={{ display: "grid", placeItems: "center", height: "100%", textAlign: "center" }}><div><Icons.arch size={44} /><h2 style={{ color: T.text, marginTop: 14 }}>No architecture model generated yet.</h2><p style={{ color: T.dim, margin: "8px 0 18px" }}>Run architecture generation to map services, layers, APIs, and data stores.</p><DashButton variant="primary" onClick={onRun}>Generate Architecture</DashButton></div></div>;
+}
+
+function ArchitectureErrorState({ onRetry }) {
+  return <div style={{ display: "grid", placeItems: "center", height: "100%", textAlign: "center" }}><div><Icons.error size={44} stroke={T.error} /><h2 style={{ color: T.text, marginTop: 14 }}>Unable to load architecture.</h2><p style={{ color: T.dim, margin: "8px 0 18px" }}>The architecture graph could not be generated from the latest analysis data.</p><DashButton variant="primary" onClick={onRetry}>Retry</DashButton></div></div>;
+}
+
+function ArchitectureExplorerPage({ setActivePage }) {
+  return <ReactFlowProvider><ArchitectureExplorerInner setActivePage={setActivePage} /></ReactFlowProvider>;
+}
+
+function ArchitectureExplorerInner({ setActivePage }) {
+  const [status, setStatus] = useState("ready");
+  const [level, setLevel] = useState("Repository View");
+  const [filters, setFilters] = useState({ search: "", layer: "All", language: "All", framework: "All", nodeType: "All", relationship: "All", visibility: "All" });
+  const [collapsedLayers, setCollapsedLayers] = useState(new Set());
+  const [activeFlow, setActiveFlow] = useState("login");
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [expandedNodeIds, setExpandedNodeIds] = useState(new Set());
+  const [focusMode, setFocusMode] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const { fitView } = useReactFlow();
+
+  useEffect(() => {
+    const flowNodes = new Set(activeFlow ? architectureMockData.flows[activeFlow] : []);
+    const expandedNeighbors = new Set();
+    architectureMockData.edges.forEach(edge => {
+      if (expandedNodeIds.has(edge.source)) expandedNeighbors.add(edge.target);
+      if (expandedNodeIds.has(edge.target)) expandedNeighbors.add(edge.source);
+    });
+    const derivedNodes = architectureMockData.nodes.map(node => {
+      const searchIndex = [node.data.label, node.data.type, node.data.path, node.data.framework, node.data.lang, ...(node.data.files || []), ...(node.data.apis || []), ...(node.data.services || [])].join(" ").toLowerCase();
+      const match = searchIndex.includes(filters.search.toLowerCase());
+      const visible = match && (filters.layer === "All" || node.data.layer === filters.layer) && (filters.language === "All" || node.data.lang === filters.language) && (filters.framework === "All" || node.data.framework === filters.framework) && (filters.nodeType === "All" || node.data.type === filters.nodeType) && (filters.visibility === "All" || node.data.visibility === filters.visibility) && !collapsedLayers.has(node.data.layer);
+      const active = flowNodes.has(node.id);
+      const expanded = expandedNodeIds.has(node.id) || expandedNeighbors.has(node.id);
+      return { ...node, data: { ...node.data, hidden: !visible, hideLayer: level === "Project View" }, style: { opacity: !visible ? 0.1 : focusMode && activeFlow && !active && !expanded ? 0.18 : 1 } };
+    });
+    const derivedEdges = architectureMockData.edges.map(edge => {
+      const sourceVisible = derivedNodes.find(node => node.id === edge.source && !node.data.hidden);
+      const targetVisible = derivedNodes.find(node => node.id === edge.target && !node.data.hidden);
+      const relationshipVisible = filters.relationship === "All" || edge.label === filters.relationship;
+      const selectedPath = selectedNodeId && (edge.source === selectedNodeId || edge.target === selectedNodeId);
+      const expandedPath = expandedNodeIds.has(edge.source) || expandedNodeIds.has(edge.target);
+      const active = (activeFlow && flowNodes.has(edge.source) && flowNodes.has(edge.target)) || selectedPath || expandedPath;
+      return { ...edge, type: "architecture", hidden: !(sourceVisible && targetVisible && relationshipVisible), data: { label: edge.label, active }, ...architectureEdgeStyle(edge.label, active, focusMode && activeFlow && !active) };
+    });
+    setNodes(derivedNodes);
+    setEdges(derivedEdges);
+  }, [filters, collapsedLayers, activeFlow, focusMode, level, selectedNodeId, expandedNodeIds, setNodes, setEdges]);
+
+  if (status === "loading") return <ArchitectureLoadingSkeleton />;
+  if (status === "empty") return <ArchitectureEmptyState onRun={() => setStatus("generating")} />;
+  if (status === "error") return <ArchitectureErrorState onRetry={() => setStatus("ready")} />;
+  if (status === "generating") return <ArchitectureLoadingSkeleton />;
+
+  const selectedNode = selectedNodeId ? nodes.find(node => node.id === selectedNodeId) : null;
+  const toggleLayer = layerName => setCollapsedLayers(prev => { const next = new Set(prev); next.has(layerName) ? next.delete(layerName) : next.add(layerName); return next; });
+  const reset = () => { setFilters({ search: "", layer: "All", language: "All", framework: "All", nodeType: "All", relationship: "All", visibility: "All" }); setCollapsedLayers(new Set()); setActiveFlow(null); setSelectedNodeId(null); setExpandedNodeIds(new Set()); };
+  const toggleExpand = nodeId => setExpandedNodeIds(prev => { const next = new Set(prev); next.has(nodeId) ? next.delete(nodeId) : next.add(nodeId); return next; });
+  const autoLayout = () => setNodes(current => current.map((node, index) => ({ ...node, position: { x: 90 + (index % 5) * 280, y: 70 + Math.floor(index / 5) * 170 } })));
+
+  return (
+    <div className="page-in" style={{ display: "grid", gridTemplateColumns: "300px minmax(0, 1fr) 340px", height: fullscreen ? "calc(100vh - 64px)" : "calc(100vh - 120px)", borderTop: `1px solid ${T.border}`, background: T.bg }}>
+      <aside style={{ background: T.surface, borderRight: `1px solid ${T.border}`, overflowY: "auto" }}>
+        <ArchitectureFilters filters={filters} setFilters={setFilters} />
+        <LayerSwitcher level={level} setLevel={setLevel} collapsedLayers={collapsedLayers} toggleLayer={toggleLayer} />
+        <FlowSimulator activeFlow={activeFlow} setActiveFlow={setActiveFlow} />
+        <HealthCards />
+        <ArchitectureLegend />
+      </aside>
+      <main style={{ position: "relative", minWidth: 0 }}>
+        <ArchitectureToolbar fitView={() => fitView({ duration: 600, padding: 0.2 })} reset={reset} focusMode={focusMode} setFocusMode={setFocusMode} fullscreen={fullscreen} setFullscreen={setFullscreen} autoLayout={autoLayout} />
+        <ArchitectureCanvas nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeClick={(_, node) => setSelectedNodeId(node.id)} onPaneClick={() => setSelectedNodeId(null)} />
+      </main>
+      <aside style={{ background: T.surface, borderLeft: `1px solid ${T.border}`, overflowY: "auto" }}>
+        <ArchitectureNodeInspector node={selectedNode} nodes={nodes} edges={edges} setActivePage={setActivePage} expandedNodeIds={expandedNodeIds} toggleExpand={toggleExpand} />
+        <ArchitectureQuickNav setActivePage={setActivePage} />
+      </aside>
+    </div>
+  );
+}
+
+/* 
+   PROMPT 12: CHANGE IMPACT ANALYSIS
+ */
+
+const impactRiskColor = risk => risk === "Critical" ? T.error : risk === "High" ? T.warning : risk === "Medium" ? T.info : T.success;
+
+function ImpactSearch({ value, onChange }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></div>
+      <input aria-label="Search files, functions, services, classes, and APIs" value={value} onChange={e => onChange(e.target.value)} placeholder="Search impact targets..." style={{ width: "100%", padding: "7px 10px 7px 30px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, fontSize: 13, outline: "none" }} />
+    </div>
+  );
+}
+
+function ImpactFilters({ filters, setFilters, maxDepth, setMaxDepth }) {
+  const field = (key, label, values) => (
+    <label style={{ display: "grid", gap: 6 }}>
+      <span style={{ fontSize: 11, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
+      <select aria-label={label} value={filters[key]} onChange={e => setFilters(prev => ({ ...prev, [key]: e.target.value }))} style={{ width: "100%", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, padding: "7px 9px", fontSize: 12 }}>
+        {values.map(value => <option key={value}>{value}</option>)}
+      </select>
+    </label>
+  );
+  return (
+    <section style={{ display: "grid", gap: 12, padding: 16, borderBottom: `1px solid ${T.border}` }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h3 style={{ fontSize: 14, color: T.text, fontWeight: 600 }}>Filters</h3>
+        <button aria-label="Reset impact filters" onClick={() => { setFilters({ search: "", risk: "All", componentType: "All", language: "All", relationship: "All" }); setMaxDepth(3); }} style={{ background: "transparent", border: "none", color: T.accentBright, fontSize: 12, cursor: "pointer" }}>Reset</button>
+      </div>
+      <ImpactSearch value={filters.search} onChange={value => setFilters(prev => ({ ...prev, search: value }))} />
+      {field("risk", "Risk Level", ["All", "Low", "Medium", "High", "Critical"])}
+      {field("componentType", "Component Type", ["All", "File", "Function", "Class", "Service", "API Endpoint", "Database Table", "Repository", "Worker"])}
+      {field("language", "Language", ["All", "TypeScript", "HTTP", "Go", "SQL", "Kotlin"])}
+      {field("relationship", "Relationship Type", ["All", "defines", "called by", "guards", "depends on", "uses", "queries", "referenced by", "contract"])}
+      <label style={{ display: "grid", gap: 6 }}>
+        <span style={{ fontSize: 11, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em" }}>Dependency Depth</span>
+        <input aria-label="Dependency depth" type="range" min="1" max="3" value={maxDepth} onChange={e => setMaxDepth(Number(e.target.value))} />
+        <span style={{ color: T.faint, fontSize: 12 }}>Showing levels 1 to {maxDepth}</span>
+      </label>
+    </section>
+  );
+}
+
+function ImpactTargetTree({ items, selectedTargetId, setSelectedTargetId, depth = 0 }) {
+  return (
+    <div style={{ display: "grid", gap: 4 }}>
+      {items.map(item => <ImpactTargetItem key={item.id} item={item} depth={depth} selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId} />)}
+    </div>
+  );
+}
+
+function ImpactTargetItem({ item, depth, selectedTargetId, setSelectedTargetId }) {
+  const [open, setOpen] = useState(depth < 2);
+  const active = selectedTargetId === item.id;
+  const hasChildren = item.children?.length > 0;
+  return (
+    <div>
+      <button aria-label={`Select ${item.type} ${item.name}`} onClick={() => { setSelectedTargetId(item.id); if (hasChildren) setOpen(!open); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", paddingLeft: 8 + depth * 14, border: `1px solid ${active ? T.accentBorder : "transparent"}`, borderRadius: T.r6, background: active ? T.accentSoft : "transparent", color: active ? T.accentBright : T.text, cursor: "pointer", textAlign: "left" }}>
+        <span style={{ width: 14, color: T.faint }}>{hasChildren ? (open ? <Icons.chevronDown size={13} /> : <Icons.chevronRight size={13} />) : null}</span>
+        <Icons.file size={14} />
+        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12, fontFamily: T.mono }}>{item.name}</span>
+        <span style={{ marginLeft: "auto", fontSize: 10, color: T.faint }}>{item.type}</span>
+      </button>
+      {open && hasChildren && <ImpactTargetTree items={item.children} depth={depth + 1} selectedTargetId={selectedTargetId} setSelectedTargetId={setSelectedTargetId} />}
+    </div>
+  );
+}
+
+function ImpactHistoryPanel({ history, setSelectedTargetId }) {
+  return (
+    <section style={{ padding: 16, borderTop: `1px solid ${T.border}` }}>
+      <h3 style={{ fontSize: 14, color: T.text, marginBottom: 10 }}>History</h3>
+      <div style={{ display: "grid", gap: 8 }}>
+        {history.map(item => (
+          <button key={item.id} onClick={() => setSelectedTargetId("class-token-service")} style={{ textAlign: "left", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 10, cursor: "pointer" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ color: T.text, fontSize: 12, fontWeight: 600 }}>{item.target}</span><span style={{ color: impactRiskColor(item.risk), fontSize: 11 }}>{item.risk}</span></div>
+            <div style={{ color: T.dim, fontSize: 11, lineHeight: 1.5, marginTop: 4 }}>{item.summary}</div>
+            <div style={{ color: T.faint, fontSize: 10, marginTop: 6 }}>{item.when}</div>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RiskScoreCard({ risk, summary }) {
+  const color = impactRiskColor(risk.level);
+  return (
+    <section style={{ background: `linear-gradient(135deg, ${T.surfaceEl}, rgba(248,81,73,0.08))`, border: `1px solid ${risk.level === "Critical" ? T.error : risk.level === "High" ? "rgba(210,153,34,0.55)" : T.border}`, borderRadius: T.r8, padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ width: 70, height: 70, borderRadius: "50%", display: "grid", placeItems: "center", background: `conic-gradient(${color} ${summary.riskScore}%, rgba(255,255,255,0.08) 0)`, boxShadow: `0 0 0 1px ${T.border}` }}>
+          <div style={{ width: 54, height: 54, borderRadius: "50%", background: T.surface, display: "grid", placeItems: "center", color: T.text, fontFamily: T.mono, fontSize: 18, fontWeight: 700 }}>{summary.riskScore}</div>
+        </div>
+        <div>
+          <div style={{ color, fontSize: 13, fontWeight: 700 }}>{risk.level} Risk</div>
+          <div style={{ color: T.dim, fontSize: 12, lineHeight: 1.5 }}>Change touches auth boundaries, API contracts, service clients, and persistence.</div>
+        </div>
+      </div>
+      <div style={{ display: "grid", gap: 7, marginTop: 14 }}>
+        {risk.reasons.map(reason => <div key={reason} style={{ color: T.dim, fontSize: 12, display: "flex", gap: 8 }}><span style={{ color }}>-</span><span>{reason}</span></div>)}
+      </div>
+    </section>
+  );
+}
+
+function ImpactDashboard({ summary }) {
+  const cards = [
+    ["Risk Score", summary.riskScore, T.warning],
+    ["Files Affected", summary.filesAffected, T.info],
+    ["Functions Affected", summary.functionsAffected, T.accentBright],
+    ["Classes Affected", summary.classesAffected, T.warning],
+    ["Services Affected", summary.servicesAffected, "#f771a3"],
+    ["API Endpoints", summary.apisAffected, T.error],
+    ["Database Tables", summary.databaseTablesAffected, T.success],
+    ["Test Coverage", `${summary.estimatedTestCoverage}%`, T.info],
+    ["Confidence", `${summary.confidenceScore}%`, T.success]
+  ];
+  return (
+    <section style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(120px, 1fr))", gap: 10 }}>
+      {cards.map(([label, value, color]) => (
+        <div key={label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 12 }}>
+          <div style={{ color: T.dim, fontSize: 11 }}>{label}</div>
+          <div style={{ color, fontSize: 20, fontFamily: T.mono, fontWeight: 700, marginTop: 6 }}>{value}</div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function ImpactNode({ data, selected }) {
+  const color = impactRiskColor(data.risk);
+  return (
+    <div aria-label={`${data.type} impact node ${data.label}`} style={{ minWidth: 178, background: data.depth === 0 ? T.accentSoft : T.surfaceEl, border: `1px solid ${selected ? T.text : data.critical ? T.error : color}`, borderRadius: T.r6, padding: 11, boxShadow: selected ? `0 0 0 3px ${T.accentSoft}` : T.shadow, opacity: data.dimmed ? 0.25 : 1 }}>
+      <Handle type="target" position={Position.Top} style={{ background: color, border: "none", width: 8, height: 8 }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, flexShrink: 0 }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: T.text, fontSize: 13, fontWeight: 700, fontFamily: T.mono, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{data.label}</div>
+          <div style={{ color: T.dim, fontSize: 11 }}>{data.type} - {data.impact}</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${T.border}`, marginTop: 9, paddingTop: 8, color: T.faint, fontSize: 10 }}>
+        <span>Depth {data.depth}</span>
+        <span>{data.dependencyCount} deps</span>
+      </div>
+      <Handle type="source" position={Position.Bottom} style={{ background: color, border: "none", width: 8, height: 8 }} />
+    </div>
+  );
+}
+
+const impactNodeTypes = { impact: ImpactNode };
+
+function ImpactEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, style, markerEnd }) {
+  const [edgePath, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath} style={style} markerEnd={markerEnd} />
+      <EdgeLabelRenderer>
+        <div style={{ position: "absolute", transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "2px 6px", color: data?.critical ? T.error : T.dim, fontSize: 10, pointerEvents: "all" }}>{data?.label}</div>
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+const impactEdgeTypes = { impact: ImpactEdge };
+
+function impactEdgeStyle(edge) {
+  const color = edge.critical ? T.error : edge.direct ? T.warning : edge.label === "queries" ? T.success : T.info;
+  return { type: "impact", data: { label: edge.label, critical: edge.critical }, markerEnd: { type: MarkerType.ArrowClosed, color }, animated: edge.critical || edge.direct, style: { stroke: color, strokeWidth: edge.critical ? 2.5 : 1.6, strokeDasharray: edge.direct ? "0" : "5 5", opacity: 0.92 } };
+}
+
+function ImpactToolbar({ fitView, reset, status, calculate, maxDepth, setMaxDepth }) {
+  return (
+    <div style={{ position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 10, display: "flex", gap: 8, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 7, boxShadow: T.shadow }}>
+      <button aria-label="Fit impact graph" onClick={fitView} style={{ border: "none", background: "transparent", color: T.text, cursor: "pointer", fontSize: 12 }}>Fit View</button>
+      <button aria-label="Expand dependency depth" onClick={() => setMaxDepth(Math.min(3, maxDepth + 1))} style={{ border: "none", background: "transparent", color: T.text, cursor: "pointer", fontSize: 12 }}>Expand</button>
+      <button aria-label="Reset impact graph" onClick={reset} style={{ border: "none", background: "transparent", color: T.text, cursor: "pointer", fontSize: 12 }}>Reset</button>
+      <button aria-label="Calculate impact" onClick={calculate} style={{ border: "none", background: T.accentSoft, color: T.accentBright, borderRadius: T.r4, padding: "3px 8px", cursor: "pointer", fontSize: 12 }}>{status === "calculating" ? "Calculating..." : "Recalculate"}</button>
+      <button aria-label="Export impact report placeholder" onClick={() => {}} style={{ border: "none", background: "transparent", color: T.faint, cursor: "pointer", fontSize: 12 }}>Export PDF</button>
+    </div>
+  );
+}
+
+function BlastRadiusGraph({ nodes, edges, onNodesChange, onEdgesChange, onNodeClick, onPaneClick }) {
+  return (
+    <ReactFlow nodes={nodes} edges={edges} nodeTypes={impactNodeTypes} edgeTypes={impactEdgeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeClick={onNodeClick} onPaneClick={onPaneClick} fitView theme="dark" attributionPosition="bottom-right">
+      <Background color={T.border} gap={22} size={1} />
+      <Controls style={{ display: "flex", flexDirection: "column", backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, overflow: "hidden" }} />
+      <MiniMap nodeColor={node => impactRiskColor(node.data.risk)} style={{ backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6 }} maskColor="rgba(0,0,0,0.55)" />
+    </ReactFlow>
+  );
+}
+
+function DependencyPathsPanel({ edges }) {
+  return (
+    <section style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 10 }}>Dependency Paths</h3>
+      <div style={{ display: "grid", gap: 7 }}>
+        {edges.filter(edge => !edge.hidden).slice(0, 6).map(edge => <div key={edge.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, color: T.dim, fontSize: 12, background: T.surfaceEl, borderRadius: T.r4, padding: "7px 9px" }}><span>{edge.source} {"->"} {edge.target}</span><span style={{ color: edge.data?.critical ? T.error : T.info }}>{edge.data?.label}</span></div>)}
+      </div>
+    </section>
+  );
+}
+
+function AffectedComponentsPanel({ components }) {
+  return (
+    <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Affected Components</h3>
+      <div style={{ display: "grid", gap: 10 }}>
+        {components.map(group => (
+          <details key={group.category} open={["Files", "APIs", "Services"].includes(group.category)} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 10 }}>
+            <summary style={{ color: T.text, fontSize: 12, cursor: "pointer" }}>{group.category} <span style={{ color: T.faint }}>({group.count})</span></summary>
+            <div style={{ display: "grid", gap: 6, marginTop: 8 }}>{group.items.map(item => <div key={item} style={{ color: T.dim, fontSize: 11, fontFamily: T.mono }}>{item}</div>)}</div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ImpactRecommendationCard({ recommendation }) {
+  const color = impactRiskColor(recommendation.level);
+  return (
+    <div style={{ background: T.surfaceEl, border: `1px solid ${recommendation.level === "High" ? "rgba(210,153,34,0.45)" : T.border}`, borderRadius: T.r6, padding: 11 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><h4 style={{ color: T.text, fontSize: 12 }}>{recommendation.title}</h4><span style={{ color, fontSize: 11 }}>{recommendation.level}</span></div>
+      <p style={{ color: T.dim, fontSize: 11, lineHeight: 1.5, marginTop: 6 }}>{recommendation.detail}</p>
+    </div>
+  );
+}
+
+function SuggestedTestsPanel({ tests }) {
+  return (
+    <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Suggested Tests</h3>
+      <div style={{ display: "grid", gap: 10 }}>
+        {tests.map(group => (
+          <div key={group.category} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 11 }}>
+            <div style={{ color: T.text, fontSize: 12, fontWeight: 700 }}>{group.category}</div>
+            <p style={{ color: T.dim, fontSize: 11, lineHeight: 1.5, margin: "5px 0 8px" }}>{group.why}</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{group.tests.map(test => <span key={test} style={{ border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "3px 6px", color: T.faint, fontSize: 10, fontFamily: T.mono }}>{test}</span>)}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ImpactReport({ data }) {
+  return (
+    <section style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 8 }}>Impact Report</h3>
+      <div style={{ color: T.dim, fontSize: 12, lineHeight: 1.6 }}>
+        <div><strong style={{ color: T.text }}>Selected:</strong> {data.selectedComponent}</div>
+        <div><strong style={{ color: T.text }}>Risk Score:</strong> {data.riskScore}</div>
+        <p style={{ marginTop: 8 }}>{data.summary}</p>
+        <div style={{ marginTop: 8, color: T.faint }}>{data.exportStatus}</div>
+      </div>
+    </section>
+  );
+}
+
+function ImpactNodeInspector({ node, setActivePage }) {
+  if (!node) return (
+    <section style={{ padding: 16 }}>
+      <div style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 14, textAlign: "center", color: T.dim, fontSize: 12 }}>
+        Select a graph node to inspect impact reason, dependency count, risk level, and quick links.
+      </div>
+    </section>
+  );
+  return (
+    <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Node Inspector</h3>
+      <div style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 12 }}>
+        <div style={{ color: T.text, fontSize: 14, fontWeight: 700, fontFamily: T.mono }}>{node.data.label}</div>
+        <div style={{ color: T.dim, fontSize: 12, marginTop: 3 }}>{node.data.type} - {node.data.language}</div>
+        <div style={{ color: T.faint, fontSize: 11, marginTop: 10, fontFamily: T.mono }}>{node.data.path}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+          <StatRow label="Risk" val={node.data.risk} />
+          <StatRow label="Deps" val={node.data.dependencyCount} />
+        </div>
+        <p style={{ color: T.dim, fontSize: 12, lineHeight: 1.5, marginTop: 12 }}>{node.data.reason}</p>
+        <p style={{ color: impactRiskColor(node.data.risk), fontSize: 12, lineHeight: 1.5, marginTop: 8 }}>{node.data.action}</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+        <DashButton icon={Icons.file} label="Open File" variant="secondary" onClick={() => {}} />
+        <DashButton icon={Icons.deps} label="View Dependency" variant="secondary" onClick={() => setActivePage("deps")} />
+        <DashButton icon={Icons.arch} label="View Architecture" variant="secondary" onClick={() => setActivePage("arch")} />
+        <DashButton icon={Icons.impact} label="View Analysis" variant="secondary" onClick={() => setActivePage("repo-analysis")} />
+      </div>
+    </section>
+  );
+}
+
+function ImpactTimelinePlaceholder({ timeline }) {
+  return (
+    <section style={{ padding: 16 }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Change Timeline</h3>
+      <div style={{ display: "grid", gap: 8 }}>{timeline.map(item => <div key={item.title} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 10 }}><div style={{ color: T.text, fontSize: 12 }}>{item.title}</div><div style={{ color: T.accentBright, fontSize: 10, marginTop: 4 }}>{item.status}</div><div style={{ color: T.dim, fontSize: 11, lineHeight: 1.5, marginTop: 5 }}>{item.detail}</div></div>)}</div>
+    </section>
+  );
+}
+
+function ImpactLoadingSkeleton() {
+  return (
+    <div className="impact-layout" style={{ display: "grid", gridTemplateColumns: "300px minmax(620px, 1fr) 360px", height: "calc(100vh - 120px)" }}>
+      {[300, 620, 360].map((width, index) => <div key={width} style={{ borderRight: index < 2 ? `1px solid ${T.border}` : "none", background: index === 1 ? T.bg : T.surface, padding: 16 }}><div className="dash-skeleton" style={{ height: index === 1 ? 320 : 44, width: "100%", marginBottom: 14 }} />{[1,2,3,4,5].map(i => <div key={i} className="dash-skeleton" style={{ height: 22, width: `${95 - i * 9}%`, marginBottom: 10 }} />)}</div>)}
+    </div>
+  );
+}
+
+function ImpactEmptyState({ onRun, onRefresh }) {
+  return (
+    <div style={{ height: "calc(100vh - 120px)", display: "grid", placeItems: "center", textAlign: "center", padding: 40 }}>
+      <div style={{ maxWidth: 520 }}><Icons.impact size={42} /><h2 style={{ color: T.text, marginTop: 14 }}>No impact detected.</h2><p style={{ color: T.dim, margin: "8px 0 18px" }}>Select a file, class, function, API, or service to calculate the blast radius.</p><div style={{ display: "flex", justifyContent: "center", gap: 10 }}><DashButton variant="primary" onClick={onRun}>Run Impact Analysis</DashButton><DashButton variant="secondary" onClick={onRefresh}>Refresh</DashButton></div></div>
+    </div>
+  );
+}
+
+function ImpactErrorState({ onRetry }) {
+  return (
+    <div style={{ height: "calc(100vh - 120px)", display: "grid", placeItems: "center", textAlign: "center", padding: 40 }}>
+      <div style={{ maxWidth: 520 }}><Icons.error size={42} stroke={T.error} /><h2 style={{ color: T.text, marginTop: 14 }}>Unable to calculate impact.</h2><p style={{ color: T.dim, margin: "8px 0 18px", lineHeight: 1.5 }}>The dependency index may be stale or incomplete. Refresh the repository analysis and retry the impact calculation.</p><DashButton variant="primary" onClick={onRetry}>Retry</DashButton></div>
+    </div>
+  );
+}
+
+function ImpactAnalysisPage({ setActivePage }) {
+  return <ReactFlowProvider><ImpactAnalysisInner setActivePage={setActivePage} /></ReactFlowProvider>;
+}
+
+function ImpactAnalysisInner({ setActivePage }) {
+  const [status, setStatus] = useState("completed");
+  const [selectedTargetId, setSelectedTargetId] = useState(impactMockData.selectedTargetId);
+  const [selectedNodeId, setSelectedNodeId] = useState(impactMockData.selectedTargetId);
+  const [maxDepth, setMaxDepth] = useState(3);
+  const [filters, setFilters] = useState({ search: "", risk: "All", componentType: "All", language: "All", relationship: "All" });
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const { fitView } = useReactFlow();
+
+  useEffect(() => {
+    const query = filters.search.toLowerCase();
+    const derivedNodes = impactMockData.nodes.map(node => {
+      const searchable = [node.data.label, node.data.type, node.data.path, node.data.language, node.data.category].join(" ").toLowerCase();
+      const visible = searchable.includes(query) && node.data.depth <= maxDepth && (filters.risk === "All" || node.data.risk === filters.risk) && (filters.componentType === "All" || node.data.type === filters.componentType) && (filters.language === "All" || node.data.language === filters.language);
+      const selectedPath = selectedNodeId && impactMockData.edges.some(edge => (edge.source === selectedNodeId && edge.target === node.id) || (edge.target === selectedNodeId && edge.source === node.id));
+      return { ...node, data: { ...node.data, critical: impactMockData.criticalPath.includes(node.id), dimmed: selectedNodeId && node.id !== selectedNodeId && !selectedPath && node.data.depth !== 0 }, hidden: !visible };
+    });
+    const derivedEdges = impactMockData.edges.map(edge => {
+      const sourceVisible = derivedNodes.find(node => node.id === edge.source && !node.hidden);
+      const targetVisible = derivedNodes.find(node => node.id === edge.target && !node.hidden);
+      const relVisible = filters.relationship === "All" || edge.label === filters.relationship;
+      return { ...edge, hidden: !(sourceVisible && targetVisible && relVisible && edge.depth <= maxDepth), ...impactEdgeStyle(edge) };
+    });
+    setNodes(derivedNodes);
+    setEdges(derivedEdges);
+  }, [filters, maxDepth, selectedNodeId, selectedTargetId, setNodes, setEdges]);
+
+  useEffect(() => {
+    setTimeout(() => fitView({ duration: 500, padding: 0.18 }), 60);
+  }, [maxDepth, filters, fitView]);
+
+  if (status === "loading" || status === "calculating") return <ImpactLoadingSkeleton />;
+  if (status === "no-impact") return <ImpactEmptyState onRun={() => setStatus("calculating")} onRefresh={() => setStatus("completed")} />;
+  if (status === "error") return <ImpactErrorState onRetry={() => setStatus("completed")} />;
+
+  const selectedNode = nodes.find(node => node.id === selectedNodeId);
+  const reset = () => { setFilters({ search: "", risk: "All", componentType: "All", language: "All", relationship: "All" }); setMaxDepth(3); setSelectedNodeId(impactMockData.selectedTargetId); };
+  const calculate = () => { setStatus("calculating"); setTimeout(() => setStatus("completed"), 650); };
+
+  return (
+    <div className="impact-layout page-in" style={{ display: "grid", gridTemplateColumns: "300px minmax(620px, 1fr) 360px", height: "calc(100vh - 120px)", borderTop: `1px solid ${T.border}`, background: T.bg, overflow: "hidden" }}>
+      <aside style={{ background: T.surface, borderRight: `1px solid ${T.border}`, display: "flex", flexDirection: "column", overflowY: "auto" }}>
+        <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+          <div style={{ color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>Change Impact Analysis</div>
+          <h2 style={{ color: T.text, fontSize: 18, marginTop: 6 }}>Select Target</h2>
+          <p style={{ color: T.dim, fontSize: 12, lineHeight: 1.5, marginTop: 6 }}>Choose a repository, folder, file, class, function, API, or service to estimate blast radius.</p>
+        </section>
+        <ImpactFilters filters={filters} setFilters={setFilters} maxDepth={maxDepth} setMaxDepth={setMaxDepth} />
+        <section style={{ padding: 12, flex: 1 }}>
+          <ImpactTargetTree items={impactTargets} selectedTargetId={selectedTargetId} setSelectedTargetId={id => { setSelectedTargetId(id); setSelectedNodeId(impactMockData.selectedTargetId); calculate(); }} />
+        </section>
+        <ImpactHistoryPanel history={impactHistory} setSelectedTargetId={setSelectedTargetId} />
+      </aside>
+
+      <main style={{ position: "relative", minWidth: 0, overflowY: "auto" }}>
+        <ImpactToolbar fitView={() => fitView({ duration: 600, padding: 0.18 })} reset={reset} status={status} calculate={calculate} maxDepth={maxDepth} setMaxDepth={setMaxDepth} />
+        <div style={{ height: 520, borderBottom: `1px solid ${T.border}` }}>
+          <BlastRadiusGraph nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeClick={(_, node) => setSelectedNodeId(node.id)} onPaneClick={() => setSelectedNodeId(null)} />
+        </div>
+        <div style={{ padding: 16, display: "grid", gap: 14 }}>
+          <RiskScoreCard risk={impactMockData.risk} summary={impactMockData.summary} />
+          <ImpactDashboard summary={impactMockData.summary} />
+          <DependencyPathsPanel edges={edges} />
+          <ImpactReport data={impactMockData.report} />
+        </div>
+      </main>
+
+      <aside style={{ background: T.surface, borderLeft: `1px solid ${T.border}`, overflowY: "auto" }}>
+        <ImpactNodeInspector node={selectedNode} setActivePage={setActivePage} />
+        <AffectedComponentsPanel components={impactMockData.affectedComponents} />
+        <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+          <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Safe Refactoring Assistant</h3>
+          <div style={{ display: "grid", gap: 10 }}>{impactMockData.recommendations.map(rec => <ImpactRecommendationCard key={rec.title} recommendation={rec} />)}</div>
+        </section>
+        <SuggestedTestsPanel tests={impactMockData.suggestedTests} />
+        <ImpactTimelinePlaceholder timeline={impactMockData.timeline} />
+      </aside>
+    </div>
+  );
+}
+
+/* 
+   PROMPT 13: GIT INTELLIGENCE
+ */
+
+const gitTypeColor = type => type === "Security" ? T.error : type === "Feature" ? T.accentBright : type === "Refactor" ? T.warning : type === "Test" ? T.info : T.dim;
+
+function GitSearch({ value, onChange }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></div>
+      <input aria-label="Search commit message, author, file, function, branch, or hash" value={value} onChange={e => onChange(e.target.value)} placeholder="Search commits, files, authors..." style={{ width: "100%", padding: "7px 10px 7px 30px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, fontSize: 13, outline: "none" }} />
+    </div>
+  );
+}
+
+function GitFilters({ filters, setFilters }) {
+  const field = (key, label, values) => (
+    <label style={{ display: "grid", gap: 6 }}>
+      <span style={{ fontSize: 11, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</span>
+      <select aria-label={label} value={filters[key]} onChange={e => setFilters(prev => ({ ...prev, [key]: e.target.value }))} style={{ width: "100%", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, padding: "7px 9px", fontSize: 12 }}>
+        {values.map(value => <option key={value}>{value}</option>)}
+      </select>
+    </label>
+  );
+  return (
+    <section style={{ display: "grid", gap: 12, padding: 16, borderBottom: `1px solid ${T.border}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 style={{ color: T.text, fontSize: 14 }}>Timeline Filters</h3>
+        <button aria-label="Reset git filters" onClick={() => setFilters({ search: "", repository: "main-api", branch: "All", author: "All", type: "All", dateRange: "Last 30 days", file: "All" })} style={{ background: "transparent", border: "none", color: T.accentBright, fontSize: 12, cursor: "pointer" }}>Reset</button>
+      </div>
+      <GitSearch value={filters.search} onChange={value => setFilters(prev => ({ ...prev, search: value }))} />
+      {field("repository", "Repository", gitMockData.repositories)}
+      {field("branch", "Branch", ["All", ...gitMockData.branches])}
+      {field("author", "Author", ["All", ...gitMockData.authors.map(a => a.name)])}
+      {field("type", "Commit Type", ["All", "Feature", "Refactor", "Security", "Test", "Fix"])}
+      {field("dateRange", "Date Range", ["Last 7 days", "Last 30 days", "Last 90 days", "All time"])}
+      {field("file", "File", ["All", ...new Set(gitMockData.commits.flatMap(commit => commit.changedFiles))])}
+    </section>
+  );
+}
+
+function GitStatisticsCards({ stats }) {
+  const cards = [
+    ["Total Commits", stats.totalCommits],
+    ["Contributors", stats.contributors],
+    ["Avg Commits / Day", stats.averageCommitsPerDay],
+    ["Largest Commit", stats.largestCommit],
+    ["Most Active Branch", stats.mostActiveBranch],
+    ["Most Modified File", stats.mostModifiedFile],
+    ["Oldest File", stats.oldestFile],
+    ["Newest File", stats.newestFile]
+  ];
+  return (
+    <section style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(130px, 1fr))", gap: 10 }}>
+      {cards.map(([label, value]) => (
+        <div key={label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 12 }}>
+          <div style={{ color: T.dim, fontSize: 11 }}>{label}</div>
+          <div style={{ color: T.text, fontSize: 15, fontFamily: T.mono, marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function CommitCard({ commit, selected, onSelect }) {
+  const color = gitTypeColor(commit.type);
+  return (
+    <button aria-label={`Select commit ${commit.hash}`} onClick={() => onSelect(commit.hash)} style={{ width: "100%", textAlign: "left", background: selected ? T.accentSoft : T.surface, border: `1px solid ${selected ? T.accentBorder : T.border}`, borderRadius: T.r8, padding: 14, cursor: "pointer" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ color: T.text, fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{commit.message}</h3>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, color: T.dim, fontSize: 11 }}>
+            <span style={{ fontFamily: T.mono, color: T.accentBright }}>{commit.hash}</span>
+            <span>{commit.author}</span>
+            <span>{commit.date}</span>
+            <span>{commit.branch}</span>
+          </div>
+        </div>
+        <span style={{ color, border: `1px solid ${color}`, borderRadius: T.r4, padding: "3px 7px", fontSize: 11, height: 24 }}>{commit.type}</span>
+      </div>
+      <p style={{ color: T.dim, fontSize: 12, lineHeight: 1.5, marginTop: 10 }}>{commit.summary}</p>
+      <div style={{ display: "flex", gap: 10, color: T.faint, fontSize: 11, marginTop: 12 }}>
+        <span>{commit.filesChanged} files</span>
+        <span style={{ color: T.success }}>+{commit.insertions}</span>
+        <span style={{ color: T.error }}>-{commit.deletions}</span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>{commit.tags.map(tag => <span key={tag} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "2px 6px", color: T.faint, fontSize: 10 }}>{tag}</span>)}</div>
+    </button>
+  );
+}
+
+function CommitTimeline({ commits, selectedCommitHash, setSelectedCommitHash }) {
+  return (
+    <section style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+      <h2 style={{ color: T.text, fontSize: 16, marginBottom: 12 }}>Repository Timeline</h2>
+      <div style={{ display: "grid", gap: 12 }}>
+        {commits.map(commit => <CommitCard key={commit.hash} commit={commit} selected={selectedCommitHash === commit.hash} onSelect={setSelectedCommitHash} />)}
+      </div>
+    </section>
+  );
+}
+
+function GitEvolutionTimeline({ title, items, selectedKey }) {
+  return (
+    <section style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>{title}</h3>
+      <div style={{ display: "grid", gap: 10 }}>
+        {items.map((item, index) => (
+          <div key={`${title}-${item.commit}-${index}`} style={{ display: "grid", gridTemplateColumns: "18px 1fr", gap: 10 }}>
+            <div style={{ display: "grid", justifyItems: "center" }}>
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: index === items.length - 1 ? T.accentBright : T.faint, marginTop: 4 }} />
+              {index < items.length - 1 && <span style={{ width: 1, height: 42, background: T.border }} />}
+            </div>
+            <div style={{ background: item[selectedKey] ? T.surfaceEl : "transparent", border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ color: T.text, fontSize: 12, fontWeight: 700 }}>{item.state}</span><span style={{ color: T.accentBright, fontSize: 11, fontFamily: T.mono }}>{item.commit}</span></div>
+              <div style={{ color: T.dim, fontSize: 11, marginTop: 4 }}>{item.date} - {item.detail}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AuthorInsights({ authors }) {
+  return (
+    <section style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Author Insights</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(180px, 1fr))", gap: 10 }}>
+        {authors.map(author => (
+          <div key={author.name} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 30, height: 30, borderRadius: "50%", background: T.accentSoft, color: T.accentBright, display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700 }}>{author.initials}</div>
+              <div><div style={{ color: T.text, fontSize: 12, fontWeight: 700 }}>{author.name}</div><div style={{ color: T.dim, fontSize: 11 }}>{author.commits} commits - {author.filesModified} files</div></div>
+            </div>
+            <div style={{ display: "flex", alignItems: "end", gap: 3, height: 34, marginTop: 12 }}>{author.timeline.map((value, i) => <span key={i} style={{ width: 10, height: Math.max(6, value), background: T.accentBright, opacity: 0.45 + i * 0.06, borderRadius: 2 }} />)}</div>
+            <div style={{ color: T.faint, fontSize: 10, marginTop: 9 }}>{author.activeAreas.join(", ")}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10, color: T.faint, fontSize: 11 }}>Contribution heatmap placeholder.</div>
+    </section>
+  );
+}
+
+function HotspotCards({ hotspots }) {
+  const group = (title, items) => (
+    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 10 }}>{title}</h3>
+      <div style={{ display: "grid", gap: 8 }}>{items.map(item => <div key={item.name} style={{ display: "flex", justifyContent: "space-between", gap: 10, background: T.surfaceEl, borderRadius: T.r4, padding: "7px 9px", fontSize: 12 }}><span style={{ color: T.dim, fontFamily: T.mono }}>{item.name}</span><span style={{ color: item.risk === "High" ? T.warning : T.success }}>{item.changes} changes</span></div>)}</div>
+    </div>
+  );
+  return (
+    <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      {group("Most Changed Files", hotspots.mostChangedFiles)}
+      {group("Stable Areas", hotspots.leastChangedFiles)}
+      <div style={{ gridColumn: "1 / -1", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+        <h3 style={{ color: T.text, fontSize: 14, marginBottom: 10 }}>Recently Active Modules</h3>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{hotspots.recentlyActiveModules.map(module => <span key={module} style={{ background: T.accentSoft, border: `1px solid ${T.accentBorder}`, borderRadius: T.r4, padding: "4px 8px", color: T.accentBright, fontSize: 11 }}>{module}</span>)}</div>
+      </div>
+    </section>
+  );
+}
+
+function RelatedChangesPanel({ relatedChanges }) {
+  return (
+    <section style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Related Changes</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(160px, 1fr))", gap: 10 }}>
+        {relatedChanges.map(change => <div key={change.title} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 11 }}><div style={{ color: T.text, fontSize: 12, fontWeight: 700 }}>{change.title}</div><div style={{ color: T.info, fontSize: 10, marginTop: 4 }}>{change.type} - {change.confidence}% confidence</div><div style={{ display: "grid", gap: 4, marginTop: 8 }}>{change.items.map(item => <span key={item} style={{ color: T.dim, fontSize: 11, fontFamily: T.mono }}>{item}</span>)}</div></div>)}
+      </div>
+    </section>
+  );
+}
+
+function ReplayTimeline({ replay, replayIndex, setReplayIndex }) {
+  const point = replay[replayIndex];
+  return (
+    <section style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 12 }}><h3 style={{ color: T.text, fontSize: 14 }}>Visual Commit Replay</h3><span style={{ color: T.accentBright, fontSize: 11, fontFamily: T.mono }}>{point.hash}</span></div>
+      <input aria-label="Move between commits" type="range" min="0" max={replay.length - 1} value={replayIndex} onChange={e => setReplayIndex(Number(e.target.value))} style={{ width: "100%" }} />
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr repeat(3, 1fr)", gap: 8, marginTop: 12 }}>
+        <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 10 }}><div style={{ color: T.text, fontSize: 12 }}>{point.label}</div><div style={{ color: T.faint, fontSize: 11, marginTop: 4 }}>Future file diff visualization placeholder.</div></div>
+        {["files", "functions", "modules"].map(key => <div key={key} style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 10 }}><div style={{ color: T.dim, fontSize: 10, textTransform: "uppercase" }}>{key}</div><div style={{ color: T.text, fontSize: 18, fontFamily: T.mono, marginTop: 4 }}>{point[key]}</div></div>)}
+      </div>
+    </section>
+  );
+}
+
+function CommitDetailsPanel({ commit }) {
+  if (!commit) return null;
+  return (
+    <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Commit Details</h3>
+      <div style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 12 }}>
+        <div style={{ color: T.text, fontSize: 14, fontWeight: 700 }}>{commit.message}</div>
+        <div style={{ color: T.accentBright, fontFamily: T.mono, fontSize: 12, marginTop: 6 }}>{commit.hash}</div>
+        <div style={{ color: T.dim, fontSize: 12, lineHeight: 1.7, marginTop: 8 }}>Author: {commit.author}<br />Date: {commit.date}<br />Parent: {commit.parent}<br />Issue: {commit.relatedIssue}<br />PR: {commit.relatedPR}</div>
+      </div>
+      <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+        <GitDetailList title="Changed Files" items={commit.changedFiles} />
+        <GitDetailList title="Changed Functions" items={commit.changedFunctions} />
+        <GitDetailList title="Changed Classes" items={commit.changedClasses.length ? commit.changedClasses : ["No classes changed"]} />
+      </div>
+    </section>
+  );
+}
+
+function GitDetailList({ title, items }) {
+  return <div><div style={{ color: T.dim, fontSize: 11, textTransform: "uppercase", marginBottom: 6 }}>{title}</div><div style={{ display: "grid", gap: 5 }}>{items.map(item => <div key={item} style={{ background: T.surfaceEl, borderRadius: T.r4, padding: "6px 8px", color: T.text, fontSize: 11, fontFamily: T.mono }}>{item}</div>)}</div></div>;
+}
+
+function GitAuthorDetails({ commit }) {
+  const author = gitMockData.authors.find(item => item.name === commit?.author);
+  if (!author) return null;
+  return (
+    <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Author Details</h3>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 12 }}>
+        <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.accentSoft, color: T.accentBright, display: "grid", placeItems: "center", fontWeight: 700 }}>{author.initials}</div>
+        <div><div style={{ color: T.text, fontSize: 13, fontWeight: 700 }}>{author.name}</div><div style={{ color: T.dim, fontSize: 11 }}>{author.commits} commits - {author.filesModified} files modified</div></div>
+      </div>
+    </section>
+  );
+}
+
+function GitFuturePanel({ future }) {
+  return (
+    <section style={{ padding: 16 }}>
+      <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Future Integrations</h3>
+      <div style={{ display: "grid", gap: 8 }}>{future.map(item => <div key={item} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 10 }}><div style={{ color: T.text, fontSize: 12 }}>{item}</div><div style={{ color: T.faint, fontSize: 10, marginTop: 4 }}>Future feature placeholder.</div></div>)}</div>
+    </section>
+  );
+}
+
+function GitLoadingSkeleton() {
+  return <div className="git-layout" style={{ display: "grid", gridTemplateColumns: "300px minmax(650px, 1fr) 360px", height: "calc(100vh - 120px)" }}>{[300,650,360].map((width, index) => <div key={width} style={{ background: index === 1 ? T.bg : T.surface, borderRight: index < 2 ? `1px solid ${T.border}` : "none", padding: 16 }}><div className="dash-skeleton" style={{ height: index === 1 ? 300 : 42, marginBottom: 14 }} />{[1,2,3,4,5].map(i => <div key={i} className="dash-skeleton" style={{ height: 20, width: `${92 - i * 8}%`, marginBottom: 10 }} />)}</div>)}</div>;
+}
+
+function GitEmptyState({ onRefresh }) {
+  return <div style={{ height: "calc(100vh - 120px)", display: "grid", placeItems: "center", textAlign: "center", padding: 40 }}><div><Icons.git size={42} /><h2 style={{ color: T.text, marginTop: 14 }}>No Git history available.</h2><p style={{ color: T.dim, margin: "8px 0 18px" }}>Connect a Git repository or refresh repository analysis to load commit intelligence.</p><DashButton variant="primary" onClick={onRefresh}>Refresh</DashButton></div></div>;
+}
+
+function GitErrorState({ onRetry }) {
+  return <div style={{ height: "calc(100vh - 120px)", display: "grid", placeItems: "center", textAlign: "center", padding: 40 }}><div><Icons.error size={42} stroke={T.error} /><h2 style={{ color: T.text, marginTop: 14 }}>Unable to load Git intelligence.</h2><p style={{ color: T.dim, margin: "8px 0 18px" }}>The repository history index may be stale or unavailable. Retry after reconnecting Git metadata.</p><DashButton variant="primary" onClick={onRetry}>Retry</DashButton></div></div>;
+}
+
+function GitIntelligencePage() {
+  const [status, setStatus] = useState("ready");
+  const [filters, setFilters] = useState({ search: "", repository: "main-api", branch: "All", author: "All", type: "All", dateRange: "Last 30 days", file: "All" });
+  const [selectedCommitHash, setSelectedCommitHash] = useState(gitMockData.commits[0].hash);
+  const [replayIndex, setReplayIndex] = useState(gitMockData.replay.length - 1);
+
+  if (status === "loading") return <GitLoadingSkeleton />;
+  if (status === "empty") return <GitEmptyState onRefresh={() => setStatus("ready")} />;
+  if (status === "error") return <GitErrorState onRetry={() => setStatus("ready")} />;
+
+  const query = filters.search.toLowerCase();
+  const filteredCommits = gitMockData.commits.filter(commit => {
+    const searchable = [commit.message, commit.author, commit.hash, commit.branch, commit.type, ...commit.changedFiles, ...commit.changedFunctions].join(" ").toLowerCase();
+    return searchable.includes(query) && (filters.branch === "All" || commit.branch === filters.branch) && (filters.author === "All" || commit.author === filters.author) && (filters.type === "All" || commit.type === filters.type) && (filters.file === "All" || commit.changedFiles.includes(filters.file));
+  });
+  const selectedCommit = gitMockData.commits.find(commit => commit.hash === selectedCommitHash) || filteredCommits[0] || gitMockData.commits[0];
+
+  return (
+    <div className="git-layout page-in" style={{ display: "grid", gridTemplateColumns: "300px minmax(650px, 1fr) 360px", height: "calc(100vh - 120px)", borderTop: `1px solid ${T.border}`, background: T.bg, overflow: "hidden" }}>
+      <aside style={{ background: T.surface, borderRight: `1px solid ${T.border}`, overflowY: "auto" }}>
+        <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+          <div style={{ color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>Git Intelligence</div>
+          <h2 style={{ color: T.text, fontSize: 18, marginTop: 6 }}>Repository Evolution</h2>
+          <p style={{ color: T.dim, fontSize: 12, lineHeight: 1.5, marginTop: 6 }}>Trace who changed code, why it changed, and which files evolve together.</p>
+        </section>
+        <GitFilters filters={filters} setFilters={setFilters} />
+      </aside>
+      <main style={{ minWidth: 0, overflowY: "auto", padding: 16, display: "grid", gap: 14 }}>
+        <GitStatisticsCards stats={gitMockData.stats} />
+        <CommitTimeline commits={filteredCommits} selectedCommitHash={selectedCommit.hash} setSelectedCommitHash={setSelectedCommitHash} />
+        <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <GitEvolutionTimeline title="File Evolution" items={gitMockData.fileEvolution} selectedKey="file" />
+          <GitEvolutionTimeline title="Function Evolution" items={gitMockData.functionEvolution} selectedKey="fn" />
+        </section>
+        <AuthorInsights authors={gitMockData.authors} />
+        <HotspotCards hotspots={gitMockData.hotspots} />
+        <RelatedChangesPanel relatedChanges={gitMockData.relatedChanges} />
+        <ReplayTimeline replay={gitMockData.replay} replayIndex={replayIndex} setReplayIndex={setReplayIndex} />
+      </main>
+      <aside style={{ background: T.surface, borderLeft: `1px solid ${T.border}`, overflowY: "auto" }}>
+        <CommitDetailsPanel commit={selectedCommit} />
+        <GitAuthorDetails commit={selectedCommit} />
+        <section style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+          <h3 style={{ color: T.text, fontSize: 14, marginBottom: 12 }}>Related Commits</h3>
+          <div style={{ display: "grid", gap: 8 }}>{gitMockData.commits.filter(commit => commit.hash !== selectedCommit.hash).slice(0, 3).map(commit => <button key={commit.hash} onClick={() => setSelectedCommitHash(commit.hash)} style={{ textAlign: "left", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 10, cursor: "pointer" }}><div style={{ color: T.text, fontSize: 12 }}>{commit.message}</div><div style={{ color: T.accentBright, fontSize: 10, fontFamily: T.mono, marginTop: 4 }}>{commit.hash}</div></button>)}</div>
+        </section>
+        <GitFuturePanel future={gitMockData.future} />
+      </aside>
+    </div>
+  );
+}
+
+/*  */
 
 function PageStub({ pageId, setActivePage }) {
+  if (pageId === "arch") return <ArchitectureExplorerPage setActivePage={setActivePage} />;
   if (pageId === "deps") return <DependencyIntelligencePage setActivePage={setActivePage} />;
+  if (pageId === "impact") return <ImpactAnalysisPage setActivePage={setActivePage} />;
+  if (pageId === "git") return <GitIntelligencePage setActivePage={setActivePage} />;
   if (pageId === "dashboard") return <DashboardPage setActivePage={setActivePage} />;
-  if (pageId === "projects") return <ProjectsPage />;
+  if (pageId === "projects") return <ProjectsPage setActivePage={setActivePage} />;
   if (pageId === "repos")    return <RepositoriesPage setActivePage={setActivePage} />;
   if (pageId === "repo-overview") return <RepoOverviewPage setActivePage={setActivePage} />;
   if (pageId === "repo-explorer") return <RepoExplorerPage setActivePage={setActivePage} />;
@@ -4175,13 +5395,13 @@ function PageStub({ pageId, setActivePage }) {
         ))}
       </div>
       <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 24, height: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ fontSize: 13, color: T.faint, fontFamily: T.mono }}>// {meta.label.toLowerCase().replace(/ /g, "_")}_widget · coming in next prompt</span>
+        <span style={{ fontSize: 13, color: T.faint, fontFamily: T.mono }}>// {meta.label.toLowerCase().replace(/ /g, "_")}_widget  coming in next prompt</span>
       </div>
     </div>
   );
 }
 
-/* ─── MOBILE SIDEBAR OVERLAY ─────────────────────────────────────────────── */
+/*  MOBILE SIDEBAR OVERLAY  */
 function MobileSidebarOverlay({ open, setOpen, activePage, setActivePage }) {
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
@@ -4211,7 +5431,7 @@ function MobileSidebarOverlay({ open, setOpen, activePage, setActivePage }) {
   );
 }
 
-/* ─── APP LAYOUT ─────────────────────────────────────────────────────────── */
+/*  APP LAYOUT  */
 function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [activePage, setActivePage] = useState("dashboard");
@@ -4251,85 +5471,13 @@ function AppLayout() {
 }
 
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/* 
    PROMPT 10: DEPENDENCY INTELLIGENCE EXPLORER
-═══════════════════════════════════════════════════════════════════════════ */
+ */
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/* 
    PROMPT 10: DEPENDENCY INTELLIGENCE EXPLORER
-═══════════════════════════════════════════════════════════════════════════ */
-
-const dependencyMockData = {
-  nodes: [
-    { id: "API Gateway", type: "customDep", position: { x: 400, y: 50 }, data: { label: "API Gateway", type: "Service", lang: "Go", risk: "Low", fanIn: 1, fanOut: 2, files: 1, functions: 4, classes: 0, modules: 1, apis: 3, services: 1, loc: "gateway/main.go", updated: "2 hrs ago" } },
-    { id: "UserController", type: "customDep", position: { x: 300, y: 150 }, data: { label: "UserController", type: "Class", lang: "TypeScript", risk: "Medium", fanIn: 2, fanOut: 1, files: 3, functions: 12, classes: 2, modules: 1, apis: 5, services: 0, loc: "src/controllers/UserController.ts", updated: "1 day ago" } },
-    { id: "UserService", type: "customDep", position: { x: 400, y: 250 }, data: { label: "UserService", type: "Class", lang: "TypeScript", risk: "High", fanIn: 3, fanOut: 3, files: 14, functions: 38, classes: 4, modules: 2, apis: 1, services: 1, loc: "src/services/UserService.ts", updated: "3 days ago" } },
-    { id: "AuthMiddleware", type: "customDep", position: { x: 100, y: 150 }, data: { label: "AuthMiddleware", type: "Function", lang: "TypeScript", risk: "Medium", fanIn: 1, fanOut: 1, files: 4, functions: 6, classes: 0, modules: 1, apis: 2, services: 0, loc: "src/middleware/auth.ts", updated: "1 week ago" } },
-    { id: "UserRepository", type: "customDep", position: { x: 400, y: 350 }, data: { label: "UserRepository", type: "Class", lang: "TypeScript", risk: "Medium", fanIn: 2, fanOut: 1, files: 2, functions: 15, classes: 1, modules: 1, apis: 0, services: 0, loc: "src/repos/UserRepository.ts", updated: "2 days ago" } },
-    { id: "Database", type: "customDep", position: { x: 400, y: 450 }, data: { label: "UsersTable", type: "Database Table", lang: "SQL", risk: "Critical", fanIn: 4, fanOut: 0, files: 28, functions: 112, classes: 14, modules: 4, apis: 8, services: 2, loc: "db:users", updated: "1 month ago" } },
-    { id: "RedisCache", type: "customDep", position: { x: 600, y: 350 }, data: { label: "SessionCache", type: "Database Table", lang: "Redis", risk: "Low", fanIn: 2, fanOut: 0, files: 4, functions: 10, classes: 2, modules: 1, apis: 0, services: 0, loc: "cache:sessions", updated: "3 mos ago" } },
-    { id: "Logger", type: "customDep", position: { x: 100, y: 350 }, data: { label: "Logger", type: "Module", lang: "TypeScript", risk: "Low", fanIn: 8, fanOut: 0, files: 120, functions: 450, classes: 32, modules: 15, apis: 0, services: 0, loc: "src/utils/logger.ts", updated: "1 year ago" } },
-    { id: "PaymentService", type: "customDep", position: { x: 700, y: 250 }, data: { label: "PaymentService", type: "Service", lang: "Java", risk: "Critical", fanIn: 1, fanOut: 1, files: 45, functions: 180, classes: 30, modules: 8, apis: 12, services: 3, loc: "billing/PaymentService.java", updated: "4 hrs ago" } },
-    { id: "AppConfig", type: "customDep", position: { x: 100, y: 50 }, data: { label: "config.json", type: "Configuration File", lang: "JSON", risk: "Critical", fanIn: 12, fanOut: 0, files: 140, functions: 0, classes: 0, modules: 20, apis: 0, services: 5, loc: "config/default.json", updated: "5 days ago" } },
-    { id: "ENV_URL", type: "customDep", position: { x: -100, y: 50 }, data: { label: "DATABASE_URL", type: "Environment Variable", lang: "ENV", risk: "Critical", fanIn: 5, fanOut: 0, files: 12, functions: 0, classes: 0, modules: 4, apis: 0, services: 2, loc: ".env", updated: "6 mos ago" } },
-    { id: "BaseModel", type: "customDep", position: { x: 800, y: 350 }, data: { label: "BaseModel", type: "Class", lang: "TypeScript", risk: "High", fanIn: 10, fanOut: 0, files: 40, functions: 80, classes: 20, modules: 2, apis: 0, services: 0, loc: "src/models/BaseModel.ts", updated: "1 year ago" } },
-    { id: "RepoCore", type: "customDep", position: { x: 600, y: -50 }, data: { label: "CoreBackend", type: "Repository", lang: "Mixed", risk: "Critical", fanIn: 1, fanOut: 1, files: 2500, functions: 10000, classes: 800, modules: 50, apis: 100, services: 10, loc: "github.com/org/core", updated: "1 hr ago" } },
-    { id: "SrcFolder", type: "customDep", position: { x: 600, y: 50 }, data: { label: "src/services", type: "Folder", lang: "TypeScript", risk: "Medium", fanIn: 2, fanOut: 1, files: 20, functions: 100, classes: 10, modules: 1, apis: 0, services: 0, loc: "src/services/", updated: "1 day ago" } },
-    { id: "HelperFile", type: "customDep", position: { x: 100, y: 250 }, data: { label: "helpers.ts", type: "File", lang: "TypeScript", risk: "Low", fanIn: 5, fanOut: 1, files: 1, functions: 15, classes: 0, modules: 0, apis: 0, services: 0, loc: "src/utils/helpers.ts", updated: "1 week ago" } },
-    { id: "NPMReact", type: "customDep", position: { x: 800, y: 150 }, data: { label: "npm: react", type: "Package", lang: "JavaScript", risk: "High", fanIn: 20, fanOut: 0, files: 100, functions: 500, classes: 50, modules: 10, apis: 0, services: 0, loc: "node_modules/react", updated: "6 mos ago" } },
-    { id: "EndpointAPI", type: "customDep", position: { x: 600, y: 150 }, data: { label: "POST /users", type: "API Endpoint", lang: "HTTP", risk: "High", fanIn: 3, fanOut: 1, files: 1, functions: 1, classes: 1, modules: 1, apis: 1, services: 1, loc: "src/routes/users.ts", updated: "2 days ago" } },
-  ],
-  edges: [
-    { id: "d1", source: "API Gateway", target: "UserController", label: "routes to" },
-    { id: "d2", source: "API Gateway", target: "AuthMiddleware", label: "uses" },
-    { id: "d3", source: "AuthMiddleware", target: "UserService", label: "calls" },
-    { id: "d4", source: "UserController", target: "UserService", label: "calls" },
-    { id: "d5", source: "UserService", target: "UserRepository", label: "depends on" },
-    { id: "d6", source: "UserService", target: "Logger", label: "imports" },
-    { id: "d7", source: "UserRepository", target: "Database", label: "queries" },
-    { id: "d8", source: "UserService", target: "RedisCache", label: "uses" },
-    { id: "d9", source: "PaymentService", target: "UserService", label: "calls" },
-    { id: "d10", source: "AppConfig", target: "API Gateway", label: "read by" },
-    { id: "d11", source: "ENV_URL", target: "Database", label: "configures" },
-    { id: "d12", source: "UserController", target: "AppConfig", label: "read by" },
-    { id: "d13", source: "UserRepository", target: "BaseModel", label: "extends" },
-    { id: "d14", source: "PaymentService", target: "Logger", label: "references" },
-    { id: "d15", source: "RepoCore", target: "SrcFolder", label: "contains" },
-    { id: "d16", source: "SrcFolder", target: "UserService", label: "contains" },
-    { id: "d17", source: "UserService", target: "HelperFile", label: "imports" },
-    { id: "d18", source: "HelperFile", target: "Logger", label: "imports" },
-    { id: "d19", source: "PaymentService", target: "EndpointAPI", label: "calls" },
-    { id: "d20", source: "EndpointAPI", target: "UserController", label: "routes to" },
-    { id: "d21", source: "EndpointAPI", target: "NPMReact", label: "uses" },
-  ]
-};
-
-const dependencyTree = [
-  { id: "RepoCore", name: "CoreBackend", type: "Repository", children: [
-    { id: "SrcFolder", name: "src/services", type: "Folder", children: [
-      { id: "UserService", name: "UserService", type: "Class", children: [
-        { id: "UserRepository", name: "UserRepository", type: "Class", children: [
-          { id: "Database", name: "UsersTable", type: "Database Table", children: [] },
-          { id: "BaseModel", name: "BaseModel", type: "Class", children: [] }
-        ]},
-        { id: "RedisCache", name: "SessionCache", type: "Database Table", children: [] },
-        { id: "Logger", name: "Logger", type: "Module", children: [] },
-        { id: "HelperFile", name: "helpers.ts", type: "File", children: [] }
-      ]}
-    ]}
-  ]},
-  { id: "AppConfig", name: "config.json", type: "Configuration File", children: [] },
-  { id: "ENV_URL", name: "DATABASE_URL", type: "Environment Variable", children: [] },
-  { id: "API Gateway", name: "API Gateway", type: "Service", children: [
-    { id: "UserController", name: "UserController", type: "Class", children: [] },
-    { id: "AuthMiddleware", name: "AuthMiddleware", type: "Function", children: [] }
-  ]},
-  { id: "PaymentService", name: "PaymentService", type: "Service", children: [
-    { id: "EndpointAPI", name: "POST /users", type: "API Endpoint", children: [
-      { id: "NPMReact", name: "npm: react", type: "Package", children: [] }
-    ]}
-  ]}
-];
+ */
 
 const getDepEdgeStyle = (label, selectedNodeId, source, target) => {
   let color = T.dim;
@@ -4407,7 +5555,7 @@ const CustomDepNode = ({ data, selected }) => {
 
 const depNodeTypes = { customDep: CustomDepNode };
 
-/* ─── SUBCOMPONENTS ─── */
+/*  SUBCOMPONENTS  */
 
 function DependencyTree({ items, depth = 0 }) {
   return (
@@ -4727,7 +5875,7 @@ function DependencyLoadingState() {
   );
 }
 
-/* ─── MAIN COMPONENT ─── */
+/*  MAIN COMPONENT  */
 
 function LoadingSkeleton() {
   return <DependencyLoadingState />;
@@ -4901,11 +6049,11 @@ function DependencyIntelligenceInner() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  */
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/* 
    ROOT ROUTER
-═══════════════════════════════════════════════════════════════════════════ */
+ */
 export default function CodeScopeApp({ initialScreen = "app" }) {
   const [screen, setScreen] = useState(initialScreen); // login | register | forgot | reset | app
 
@@ -4919,19 +6067,6 @@ export default function CodeScopeApp({ initialScreen = "app" }) {
       {screen === "forgot"   && <ForgotPage   nav={nav} />}
       {screen === "reset"    && <ResetPage    nav={nav} />}
       {screen === "app"      && <AppLayout />}
-
-      {/* Demo nav strip — remove in production */}
-      {screen !== "app" && (
-        <div style={{ position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 6, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: "6px 8px", zIndex: 999 }}>
-          {[["login","Login"],["register","Register"],["forgot","Forgot"],["reset","Reset"],["app","App shell"]].map(([id, label]) => (
-            <button key={id} onClick={() => setScreen(id)} style={{
-              padding: "5px 12px", borderRadius: T.r4, border: "none", cursor: "pointer", fontSize: 11,
-              background: screen === id ? T.accent : T.surfaceEl, color: screen === id ? "#fff" : T.faint,
-              fontFamily: T.mono,
-            }}>{label}</button>
-          ))}
-        </div>
-      )}
     </>
   );
 }
