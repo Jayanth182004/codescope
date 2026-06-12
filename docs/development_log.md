@@ -4,3 +4,5 @@
 
 ## June 11: Documented configuration for auth and session lifetimes.
 
+## June 12: Created setup guide for backend dependencies and virtual environments.
+
