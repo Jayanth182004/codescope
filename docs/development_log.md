@@ -6,3 +6,5 @@
 
 ## June 12: Created setup guide for backend dependencies and virtual environments.
 
+## June 13: Outlined API endpoint tests and initial mock definitions.
+
