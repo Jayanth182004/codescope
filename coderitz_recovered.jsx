@@ -1,0 +1,1010 @@
+Created At: 2026-06-25T15:45:40Z
+Completed At: 2026-06-25T15:46:04Z
+The following changes were made by the multi_replace_file_content tool to: c:\Users\eslav\OneDrive\Desktop\my project\coderitz.jsx. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -566,8 +566,7 @@
+ }
+ 
+ /* ─── Sidebar ────────────────────────────────────────────────────────────── */
+-function Sidebar({ collapsed, setCollapsed, activePage, setActivePage, onLogout }) {
+-  const [wsOpen, setWsOpen] = useState(false);
++function Sidebar({ collapsed, setCollapsed, activePage, setActivePage, onLogout, workspaces, setWorkspaces, activeWorkspace, setActiveWorkspace, fetchWorkspaceData, wsOpen, setWsOpen }) {
+   const width = collapsed ? 56 : 220;
+ 
+   return (
+@@ -606,8 +606,8 @@
+         )}
+       </div>
+ 
+-      {/* Workspace switcher */}
+-      {!collapsed && (
++      {/* Workspace selector */}
++      {!collapsed && activeWorkspace && (
+         <div style={{ padding: "10px 10px 6px" }}>
+           <button
+             onClick={() => setWsOpen(o => !o)}
+@@ -614,18 +614,36 @@
+           >
+             <div style={{ width: 20, height: 20, borderRadius: T.r4, background: T.accentSoft, border: `1px solid ${T.accentBorder}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+-              <span style={{ fontSize: 9, fontWeight: 700, color: T.accentBright }}>CR</span>
+-            </div>
+-            <span style={{ fontSize: 12, fontWeight: 500, flex: 1, textAlign: "left" }}>coderitz-ai</span>
++              <span style={{ fontSize: 9, fontWeight: 700, color: T.accentBright }}>{activeWorkspace.avatar || "CR"}</span>
++            </div>
++            <span style={{ fontSize: 12, fontWeight: 500, flex: 1, textAlign: "left" }}>{activeWorkspace.name}</span>
+             <Icons.chevronDown />
+           </button>
+           {wsOpen && (
+-            <div className="nav-dropdown" style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 6, marginTop: 4 }}>
+-              {["coderitz-ai", "personal", "+ New workspace"].map(ws => (
+-                <button key={ws} onClick={() => setWsOpen(false)} style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "7px 8px", borderRadius: T.r4, cursor: "pointer", fontSize: 12, color: T.faint }}
+-                  onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov}
+-                  onMouseLeave={e => e.currentTarget.style.background = "none"}
+-                >{ws}</button>
+-              ))}
++            <div className="nav-dropdown" style={{ position: "absolute", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 6, marginTop: 4, width: 200, zIndex: 100 }}>
++              {workspaces.map(ws => (
++                <button key={ws.id} onClick={() => { setActiveWorkspace(ws); fetchWorkspaceData(ws.id); setWsOpen(false); }} style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "7px 8px", borderRadius: T.r4, cursor: "pointer", fontSize: 12, color: T.faint }}
++                  onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov}
++                  onMouseLeave={e => e.currentTarget.style.background = "none"}
++                >{ws.name}</button>
++              ))}
++              <button 
++                onClick={() => {
++                  const name = prompt("Enter new workspace name:");
++                  if (name) {
++                    apiCall("/workspaces", {
++                      method: "POST",
++                      body: JSON.stringify({ name, avatar: name.slice(0,2).toUpperCase() })
++                    })
++                    .then(res => {
++                      setWorkspaces(prev => [...prev, res.data]);
++                      setActiveWorkspace(res.data);
++                      fetchWorkspaceData(res.data.id);
++                    });
++                  }
++                  setWsOpen(false);
++                }}
++                style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "7px 8px", borderRadius: T.r4, cursor: "pointer", fontSize: 12, color: T.accentBright, fontWeight: 600 }}
++              >+ New workspace</button>
+             </div>
+           )}
+         </div>
+@@ -953,1552 +953,43 @@
+   profile:    { label: "Profile",             breadcrumb: ["Dashboard", "Profile"] },
+ };
+ 
+-const dashboardData = {
+-  user: "jayanth",
+-  workspace: "coderitz-ai",
+-  stats: [
+-    ["Projects", "12", "+2 this week", T.success],
+-    ["Repositories", "48", "+6 connected", T.success],
+-    ["Files Analyzed", "128.4k", "+18%", T.success],
+-    ["Functions Indexed", "42,817", "+3,204", T.success],
+-    ["Dependencies Found", "9,642", "+411", T.info],
+-    ["Architecture Graphs", "34", "+5 generated", T.success],
+-    ["Analyses Completed", "216", "+24 today", T.success],
+-    ["Avg. Repository Health", "86%", "-3 pts", T.warning],
+-  ],
+-  repos: [
+-    { name: "main-api", language: "TypeScript", branch: "main", status: "Attention", last: "12 min ago", score: 74, risk: "Medium", color: T.warning },
+-    { name: "payments-service", language: "Go", branch: "release/2.4", status: "Healthy", last: "38 min ago", score: 92, risk: "Low", color: T.success },
+-    { name: "auth-gateway", language: "Java", branch: "main", status: "Critical path", last: "1 hr ago", score: 61, risk: "High", color: T.error },
+-  ],
+-  activity: [
+-    ["Repository Uploaded", "frontend-platform", "2 min ago", Icons.repos],
+-    ["Analysis Completed", "payments-service", "18 min ago", Icons.check],
+-    ["Dependency Graph Generated", "main-api", "44 min ago", Icons.deps],
+-    ["Architecture Updated", "auth-gateway", "1 hr ago", Icons.arch],
+-    ["Project Created", "mobile-suite", "3 hr ago", Icons.projects],
+-    ["Future AI Analysis Placeholder", "search-indexer", "Soon", Icons.ai],
+-  ],
+-  recent: [
+-    ["main-api", "Today, 4:18 PM", "TypeScript", 72],
+-    ["auth-gateway", "Today, 2:03 PM", "Java", 58],
+-    ["data-pipeline", "Yesterday", "Python", 91],
+-  ],
+-  queue: [
+-    { repo: "frontend-platform", progress: 68, eta: "4 min", step: "Parsing Code" },
+-    { repo: "search-indexer", progress: 42, eta: "9 min", step: "Scanning Files" },
+-  ],
+-  languages: [
+-    ["Python", 28, "#58A6FF"],
+-    ["TypeScript", 24, T.accentBright],
+-    ["JavaScript", 17, "#D29922"],
+-    ["Go", 13, "#79C0FF"],
+-    ["Java", 11, "#F0883E"],
+-    ["Rust", 7, "#F85149"],
+-  ],
+-  risks: [
+-    ["Critical Repositories", "3", T.error],
+-    ["Medium Risk", "9", T.warning],
+-    ["Healthy Projects", "18", T.success],
+-    ["Pending Analysis", "7", T.info],
+-  ],
+-  favorites: [
+-    ["payments-service", "92% health"],
+-    ["main-api", "3 queued tasks"],
+-    ["frontend-platform", "analysis running"],
+-  ],
+-};
+-
+-function DashButton({ children, variant = "ghost", onClick, title }) {
+-  const isPrimary = variant === "primary";
+-  return (
+-    <button
+-      onClick={onClick}
+-      title={title}
+-      style={{
+-        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
+-        minHeight: 34, padding: "8px 12px", borderRadius: T.r6, cursor: "pointer",
+-        border: `1px solid ${isPrimary ? T.accentBorder : T.border}`,
+-        background: isPrimary ? T.accent : T.surfaceEl,
+-        color: isPrimary ? "#fff" : T.dim, fontSize: 12, fontWeight: 500,
+-      }}
+-    >
+-      {children}
+-    </button>
+-  );
+-}
+-
+-function Pill({ children, color = T.dim }) {
+-  return (
+-    <span style={{
+-      display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 8px",
+-      borderRadius: T.r12, border: `1px solid ${color}55`, background: `${color}16`,
+-      color, fontSize: 11, fontWeight: 500, whiteSpace: "nowrap"
+-    }}>{children}</span>
+-  );
+-}
+-
+-function ProgressBar({ value, color = T.accentBright, animated = false }) {
+-  return (
+-    <div aria-label={`${value}% complete`} style={{ height: 7, borderRadius: 999, background: T.bg, border: `1px solid ${T.border}`, overflow: "hidden" }}>
+-      <div
+-        className={animated ? "dash-progress-fill" : ""}
+-        style={{
+-          width: `${value}%`, height: "100%", borderRadius: 999,
+-          background: animated
+-            ? `linear-gradient(90deg, ${color}, ${T.accentBright}, ${color})`
+-            : color,
+-        }}
+-      />
+-    </div>
+-  );
+-}
+-
+-function WidgetShell({ title, children, action, loading, empty, error }) {
+-  const [collapsed, setCollapsed] = useState(false);
+-  return (
+-    <section className="dash-card" style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, overflow: "hidden" }}>
+-      <div style={{ minHeight: 48, padding: "12px 14px", borderBottom: collapsed ? "none" : `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+-        <h2 style={{ fontSize: 13, fontWeight: 600, color: T.text, letterSpacing: "-0.01em", flex: 1 }}>{title}</h2>
+-        {action}
+-        <button aria-label={`Refresh ${title}`} title="Refresh" style={{ background: "none", border: "none", color: T.faint, cursor: "pointer", display: "flex", padding: 5 }}><Icons.git /></button>
+-        <button aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`} title={collapsed ? "Expand" : "Collapse"} onClick={() => setCollapsed(c => !c)} style={{ background: "none", border: "none", color: T.faint, cursor: "pointer", display: "flex", padding: 5 }}>
+-          {collapsed ? <Icons.chevronRight /> : <Icons.chevronDown />}
+-        </button>
+-      </div>
+-      {!collapsed && (
+-        <div style={{ padding: 14 }}>
+-          {loading ? <WidgetLoading /> : error ? <WidgetError /> : empty ? <WidgetEmpty /> : children}
+-        </div>
+-      )}
+-    </section>
+-  );
+-}
+-
+-function WidgetLoading() {
+-  return (
+-    <div style={{ display: "grid", gap: 10 }}>
+-      <div className="dash-skeleton" style={{ height: 16, width: "45%" }} />
+-      <div className="dash-skeleton" style={{ height: 86 }} />
+-      <div className="dash-skeleton" style={{ height: 12, width: "70%" }} />
+-    </div>
+-  );
+-}
+-
+-function WidgetEmpty() {
+-  return (
+-    <div style={{ minHeight: 140, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", color: T.faint, fontSize: 13 }}>
+-      No projects yet. Create a project or upload a repository to begin.
+-    </div>
+-  );
+-}
+-
+-function WidgetError() {
+-  return (
+-    <div style={{ minHeight: 130, display: "grid", placeItems: "center", gap: 10, color: T.faint, textAlign: "center" }}>
+-      <div>
+-        <div style={{ color: T.text, fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Unable to load dashboard.</div>
+-        <div style={{ fontSize: 12 }}>Check the workspace connection and try again.</div>
+-      </div>
+-      <DashButton><Icons.git />Retry</DashButton>
+-    </div>
+-  );
+-}
+-
+-function MetricCard({ label, value, trend, color }) {
+-  return (
+-    <div className="dash-card" style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 16, minHeight: 112 }}>
+-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
+-        <span style={{ fontSize: 12, color: T.faint }}>{label}</span>
+-        <Pill color={color}>{trend}</Pill>
+-      </div>
+-      <div style={{ fontFamily: T.mono, fontSize: 26, color: T.text, letterSpacing: "-0.02em" }}>{value}</div>
+-    </div>
+-  );
+-}
+-
+-function DashboardPage({ setActivePage }) {
+-  const [query, setQuery] = useState("");
+-  const [viewState, setViewState] = useState("loaded");
+-  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+-  const go = (pageId) => setActivePage?.(pageId);
+-  const noProjects = viewState === "empty";
+-  const hasError = viewState === "error";
+-  const isLoading = viewState === "loading";
+-  const StatePreview = () => (
+-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+-      <span style={{ color: T.faint, fontSize: 11, fontFamily: T.mono }}>preview state</span>
+-      {["loaded", "loading", "empty", "error"].map(state => (
+-        <button key={state} onClick={() => setViewState(state)} style={{
+-          background: viewState === state ? T.accentSoft : T.surface,
+-          color: viewState === state ? T.accentBright : T.faint,
+-          border: `1px solid ${viewState === state ? T.accentBorder : T.border}`,
+-          borderRadius: T.r6,
+-          padding: "5px 9px",
+-          cursor: "pointer",
+-          fontSize: 11,
+-          textTransform: "capitalize",
+-        }}>{state}</button>
+-      ))}
+-    </div>
+-  );
+-
+-  if (hasError) return <div className="dash-page page-in" style={{ padding: "32px 36px" }}><StatePreview /><WidgetShell title="Dashboard" error /></div>;
+-  if (isLoading) return <div className="dash-page page-in" style={{ padding: "32px 36px" }}><StatePreview /><WidgetShell title="Loading dashboard" loading /></div>;
+-  if (noProjects) return (
+-    <div className="dash-page page-in" style={{ padding: "32px 36px" }}>
+-      <StatePreview />
+-      <WidgetShell title="Welcome to ⚡ CODERITZ" empty action={<DashButton variant="primary" onClick={() => go("projects")}>Create Project</DashButton>} />
+-    </div>
+-  );
+-
+-  return (
+-    <div className="dash-page page-in" style={{ padding: "28px 32px 40px", maxWidth: 1480, margin: "0 auto" }}>
+-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, marginBottom: 18, flexWrap: "wrap" }}>
+-        <div>
+-          <p style={{ fontSize: 12, color: T.faint, marginBottom: 6 }}>Welcome back</p>
+-          <h1 style={{ fontSize: 28, fontWeight: 650, color: T.text, letterSpacing: "-0.035em", marginBottom: 8 }}>{localStorage.getItem("user_name") || dashboardData.user}</h1>
+-          <p style={{ color: T.dim, fontSize: 13 }}>{dashboardData.workspace} - {today} - Three repositories need attention before the next deploy.</p>
+-        </div>
+-        <div className="dash-header-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+-          <DashButton variant="primary" onClick={() => go("projects")}><Icons.projects />Create Project</DashButton>
+-          <DashButton onClick={() => go("repos")}><Icons.repos />Upload Repository</DashButton>
+-          <DashButton onClick={() => go("impact")}><Icons.impact />Start Analysis</DashButton>
+-        </div>
+-      </div>
+-
+-      <div className="dash-priority-grid" style={{ marginBottom: 16 }}>
+-        <button onClick={() => go("impact")} className="dash-card" style={{ textAlign: "left", background: "rgba(248,81,73,0.10)", border: `1px solid rgba(248,81,73,0.32)`, borderRadius: T.r8, padding: 16, cursor: "pointer" }}>
+-          <div style={{ color: T.error, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 8 }}>Needs attention</div>
+-          <div style={{ color: T.text, fontSize: 18, fontWeight: 650, marginBottom: 6 }}>auth-gateway health dropped to 61%</div>
+-          <div style={{ color: T.dim, fontSize: 12 }}>Run impact analysis before merging the release branch.</div>
+-        </button>
+-        {[
+-          ["Queue", "2 running", "frontend-platform parsing", T.info, "repos"],
+-          ["Risk", "3 critical", "1 high-risk dependency path", T.warning, "impact"],
+-          ["Next", "Resume main-api", "72% mapped and ready", T.accentBright, "arch"],
+-        ].map(([label, value, detail, color, page]) => (
+-          <button key={label} onClick={() => go(page)} className="dash-card" style={{ textAlign: "left", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 16, cursor: "pointer" }}>
+-            <div style={{ color, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 8 }}>{label}</div>
+-            <div style={{ color: T.text, fontFamily: T.mono, fontSize: 20, marginBottom: 6 }}>{value}</div>
+-            <div style={{ color: T.faint, fontSize: 12 }}>{detail}</div>
+-          </button>
+-        ))}
+-      </div>
+-
+-      <div className="dash-filter-row" style={{ display: "grid", gridTemplateColumns: "minmax(260px,1fr) repeat(4, minmax(140px, 180px))", gap: 10, marginBottom: 18 }}>
+-        <label style={{ position: "relative" }}>
+-          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}><Icons.search /></span>
+-          <input aria-label="Search projects" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search projects..." style={{ width: "100%", height: 38, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, padding: "0 82px 0 38px", outline: "none", fontSize: 13 }} />
+-          <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontFamily: T.mono, color: T.faint, fontSize: 11, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "2px 6px" }}>Ctrl K</span>
+-        </label>
+-        {["Workspace", "Repository", "Date", "Status"].map((label) => (
+-          <select key={label} aria-label={`${label} filter`} style={{ height: 38, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, padding: "0 10px", fontSize: 12, outline: "none" }}>
+-            <option>{label}</option>
+-          </select>
+-        ))}
+-      </div>
+-
+-      <StatePreview />
+-
+-      <div className="dash-grid-stats" style={{ marginBottom: 16 }}>
+-        {dashboardData.stats.map(([label, value, trend, color]) => <MetricCard key={label} label={label} value={value} trend={trend} color={color} />)}
+-      </div>
+-
+-      <div className="dash-grid-main" style={{ marginBottom: 16 }}>
+-        <WidgetShell title="Repository Health" action={<DashButton title="Open repositories" onClick={() => go("repos")}><Icons.chevronRight />View all</DashButton>}>
+-          <div style={{ display: "grid", gap: 12 }}>
+-            {dashboardData.repos.map(repo => (
+-              <article key={repo.name} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14 }}>
+-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+-                  <div>
+-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: repo.color, animation: repo.risk === "Low" ? "pulseGreen 2s infinite" : "none" }} />
+-                      <h3 style={{ fontSize: 14, color: T.text, fontWeight: 600, fontFamily: T.mono }}>{repo.name}</h3>
+-                    </div>
+-                    <p style={{ fontSize: 12, color: T.faint }}>{repo.language} - {repo.branch} - last analysis {repo.last}</p>
+-                  </div>
+-                  <Pill color={repo.color}>{repo.risk}</Pill>
+-                </div>
+-                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", marginBottom: 12 }}>
+-                  <ProgressBar value={repo.score} color={repo.color} />
+-                  <span style={{ fontFamily: T.mono, color: T.text, fontSize: 13 }}>{repo.score}%</span>
+-                </div>
+-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+-                  <span style={{ fontSize: 12, color: T.dim }}>{repo.status}</span>
+-                  <div style={{ display: "flex", gap: 6 }}>
+-                    <DashButton title="Open repository" onClick={() => go("repos")}><Icons.repo />Open</DashButton>
+-                    <DashButton title="Analyze repository" onClick={() => go("impact")}><Icons.impact />Analyze</DashButton>
+-                  </div>
+-                </div>
+-              </article>
+-            ))}
+-          </div>
+-        </WidgetShell>
+-
+-        <WidgetShell title="Recent Activity">
+-          <div style={{ display: "grid", gap: 0 }}>
+-            {dashboardData.activity.map(([title, repo, time, ActivityIcon], index) => (
+-              <div key={`${title}-${repo}`} style={{ display: "grid", gridTemplateColumns: "26px 1fr auto", gap: 10, padding: "10px 0", borderBottom: index === dashboardData.activity.length - 1 ? "none" : `1px solid ${T.border}` }}>
+-                <span style={{ width: 26, height: 26, borderRadius: T.r6, background: T.surfaceEl, border: `1px solid ${T.border}`, display: "grid", placeItems: "center" }}><ActivityIcon /></span>
+-                <div>
+-                  <div style={{ color: T.text, fontSize: 13, fontWeight: 500 }}>{title}</div>
+-                  <div style={{ color: T.faint, fontSize: 12, fontFamily: T.mono }}>{repo}</div>
+-                </div>
+-                <span style={{ color: T.faint, fontSize: 11, whiteSpace: "nowrap" }}>{time}</span>
+-              </div>
+-            ))}
+-          </div>
+-        </WidgetShell>
+-      </div>
+-
+-      <div className="dash-grid-three" style={{ marginBottom: 16 }}>
+-        <WidgetShell title="Continue Working">
+-          <div style={{ display: "grid", gap: 10 }}>
+-            {dashboardData.recent.map(([repo, opened, lang, progress]) => (
+-              <div key={repo} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 12 }}>
+-                <div>
+-                  <div style={{ color: T.text, fontFamily: T.mono, fontSize: 13, marginBottom: 4 }}>{repo}</div>
+-                  <div style={{ color: T.faint, fontSize: 12 }}>{lang} - {opened}</div>
+-                  <div style={{ marginTop: 10 }}><ProgressBar value={progress} /></div>
+-                </div>
+-                <DashButton title="Open repository" onClick={() => go("repos")}><Icons.chevronRight />Open</DashButton>
+-              </div>
+-            ))}
+-          </div>
+-        </WidgetShell>
+-
+-        <WidgetShell title="Analysis Queue">
+-          <div style={{ display: "grid", gap: 12 }}>
+-            {dashboardData.queue.map(job => (
+-              <div key={job.repo} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 12 }}>
+-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+-                  <span style={{ color: T.text, fontFamily: T.mono, fontSize: 13 }}>{job.repo}</span>
+-                  <span style={{ color: T.faint, fontSize: 12 }}>{job.eta}</span>
+-                </div>
+-                <ProgressBar value={job.progress} animated />
+-                <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", color: T.faint, fontSize: 11 }}>
+-                  {["Repository Cloned", "Scanning Files", "Parsing Code", "Building Graph", "Completed"].map(step => (
+-                    <span key={step} style={{ color: step === job.step ? T.accentBright : T.faint }}>{step}</span>
+-                  ))}
+-                </div>
+-              </div>
+-            ))}
+-          </div>
+-        </WidgetShell>
+-
+-        <WidgetShell title="Repository Languages">
+-          <div style={{ display: "grid", gap: 11 }}>
+-            {dashboardData.languages.map(([lang, value, color]) => (
+-              <div key={lang}>
+-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, color: T.dim, fontSize: 12 }}>
+-                  <span>{lang}</span><span style={{ fontFamily: T.mono }}>{value}%</span>
+-                </div>
+-                <ProgressBar value={value} color={color} />
+-              </div>
+-            ))}
+-          </div>
+-        </WidgetShell>
+-      </div>
+-
+-      <div className="dash-grid-three">
+-        <WidgetShell title="Quick Actions">
+-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+-            {[
+-              ["Create Project", Icons.projects, "projects"],
+-              ["Upload Repository", Icons.repos, "repos"],
+-              ["Connect Git", Icons.git, "git"],
+-              ["Analyze Repository", Icons.impact, "impact"],
+-              ["Open Architecture Explorer", Icons.arch, "arch"],
+-              ["Open Dependency Explorer", Icons.deps, "deps"],
+-              ["Search Repository", Icons.search, "repos"],
+-            ].map(([label, ActionIcon, page]) => (
+-              <button key={label} onClick={() => go(page)} style={{ minHeight: 70, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r8, color: T.dim, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, padding: 12, textAlign: "left", fontSize: 12 }}>
+-                <ActionIcon />{label}
+-              </button>
+-            ))}
+-          </div>
+-        </WidgetShell>
+-
+-        <WidgetShell title="Risk Overview">
+-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 10 }}>
+-            {dashboardData.risks.map(([label, value, color]) => (
+-              <div key={label} style={{ background: `${color}12`, border: `1px solid ${color}40`, borderRadius: T.r8, padding: 12 }}>
+-                <div style={{ color, fontFamily: T.mono, fontSize: 22, marginBottom: 5 }}>{value}</div>
+-                <div style={{ color: T.dim, fontSize: 12 }}>{label}</div>
+-              </div>
+-            ))}
+-          </div>
+-        </WidgetShell>
+-
+-        <WidgetShell title="Favorite Projects">
+-          <div style={{ display: "grid", gap: 10 }}>
+-            {dashboardData.favorites.map(([repo, detail]) => (
+-              <div key={repo} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 12 }}>
+-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+-                  <span aria-hidden="true" style={{ color: T.warning, fontSize: 14 }}>*</span>
+-                  <div>
+-                    <div style={{ color: T.text, fontFamily: T.mono, fontSize: 13 }}>{repo}</div>
+-                    <div style={{ color: T.faint, fontSize: 12 }}>{detail}</div>
+-                  </div>
+-                </div>
+-                <DashButton title="Open favorite" onClick={() => go("repos")}><Icons.chevronRight />Open</DashButton>
+-              </div>
+-            ))}
+-          </div>
+-        </WidgetShell>
+-      </div>
+-    </div>
+-  );
+-}
+-
+-function ProjectsPage() {
+-  // --- Simulation States ---
+-  const [viewState, setViewState] = useState("loaded"); // loaded | loading | empty | error
+-  
+-  // --- Workspaces ---
+-  const [workspaces, setWorkspaces] = useState([
+-    { id: "ws-1", name: "Northstar Platform", avatar: "NP", members: ["AM", "SK", "JL", "TR"], projectCount: 5 },
+-    { id: "ws-2", name: "Alpha Core Labs", avatar: "AC", members: ["AM", "JL"], projectCount: 3 },
+-    { id: "ws-3", name: "Personal Experiments", avatar: "PE", members: ["AM"], projectCount: 1 }
+-  ]);
+-  const [activeWorkspaceId, setActiveWorkspaceId] = useState("ws-1");
+-  const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
+-  const [isCreateWsOpen, setIsCreateWsOpen] = useState(false);
+-  const [newWsName, setNewWsName] = useState("");
+-  
+-  const [projects, setProjects] = useState([
+-    {
+-      id: "p-1",
+-      workspaceId: "ws-1",
+-      name: "Core Gateway API",
+-      description: "Codebase analyzer edge routing, gateway token verification, and reverse proxy definitions.",
+-      owner: "Arjun Mehta",
+-      createdDate: "2026-02-14",
+-      repositoryCount: 3,
+-      repoHealths: [90, 85, 92], // health breakdown for sub-repositories
+-      lastAnalysis: "12 min ago",
+-      healthScore: 89,
+-      favorite: true,
+-      icon: "🌐",
+-      color: "#3D8B7A",
+-      visibility: "Private"
+-    },
+-    {
+-      id: "p-2",
+-      workspaceId: "ws-1",
+-      name: "Checkout Integration",
+-      description: "Stripe and Adyen webhooks orchestrator, checkout workflows, and user subscription mapping.",
+-      owner: "Sarah Kim",
+-      createdDate: "2026-03-01",
+-      repositoryCount: 2,
+-      repoHealths: [94, 90],
+-      lastAnalysis: "45 min ago",
+-      healthScore: 92,
+-      favorite: true,
+-      icon: "💳",
+-      color: "#58A6FF",
+-      visibility: "Private"
+-    },
+-    {
+-      id: "p-3",
+-      workspaceId: "ws-1",
+-      name: "User Authentication Gateway",
+-      description: "Multi-tenant auth services, OAuth2 wrappers, security key protocols, and session stores.",
+-      owner: "Julian Lee",
+-      createdDate: "2026-01-20",
+-      repositoryCount: 4,
+-      repoHealths: [50, 72, 60, 62],
+-      lastAnalysis: "1 hr ago",
+-      healthScore: 61,
+-      favorite: false,
+-      icon: "🔒",
+-      color: "#F85149",
+-      visibility: "Internal"
+-    },
+-    {
+-      id: "p-4",
+-      workspaceId: "ws-1",
+-      name: "ML Processing Pipelines",
+-      description: "Data preparation scripts, feature maps generator, PyTorch service templates, and export utilities.",
+-      owner: "Arjun Mehta",
+-      createdDate: "2026-04-10",
+-      repositoryCount: 5,
+-      repoHealths: [88, 80, 82, 85, 85],
+-      lastAnalysis: "Yesterday",
+-      healthScore: 84,
+-      favorite: false,
+-      icon: "🧠",
+-      color: "#D29922",
+-      visibility: "Private"
+-    },
+-    {
+-      id: "p-5",
+-      workspaceId: "ws-1",
+-      name: "Developer Documentation Hub",
+-      description: "Astro-based documentation site generated automatically from backend type definitions.",
+-      owner: "Tanya Ray",
+-      createdDate: "2026-05-18",
+-      repositoryCount: 1,
+-      repoHealths: [97],
+-      lastAnalysis: "3 days ago",
+-      healthScore: 97,
+-      favorite: false,
+-      icon: "📝",
+-      color: "#79C0FF",
+-      visibility: "Public"
+-    },
+-    
+-    // Workspace 2 Projects
+-    {
+-      id: "p-6",
+-      workspaceId: "ws-2",
+-      name: "Alpha Compute Infrastructure",
+-      description: "Kubernetes config, Helm templates, Terraform modules, and environment manifests.",
+-      owner: "Julian Lee",
+-      createdDate: "2026-05-01",
+-      repositoryCount: 6,
+-      repoHealths: [95, 96, 92, 94, 93, 95],
+-      lastAnalysis: "2 hrs ago",
+-      healthScore: 94,
+-      favorite: true,
+-      icon: "🛡️",
+-      color: "#3D8B7A",
+-      visibility: "Private"
+-    },
+-    {
+-      id: "p-7",
+-      workspaceId: "ws-2",
+-      name: "Alpha Analytics Service",
+-      description: "Telemetry ingestion handlers, Clickhouse schema migration tools, and dashboard APIs.",
+-      owner: "Arjun Mehta",
+-      createdDate: "2026-05-12",
+-      repositoryCount: 2,
+-      repoHealths: [74, 82],
+-      lastAnalysis: "1 day ago",
+-      healthScore: 78,
+-      favorite: false,
+-      icon: "📊",
+-      color: "#D29922",
+-      visibility: "Private"
+-    },
+-    {
+-      id: "p-8",
+-      workspaceId: "ws-2",
+-      name: "Billing Adapter V2",
+-      description: "Internal ledger microservice syncing transaction states with invoice engines.",
+-      owner: "Arjun Mehta",
+-      createdDate: "2026-06-02",
+-      repositoryCount: 1,
+-      repoHealths: [100],
+-      lastAnalysis: "Never",
+-      healthScore: 100,
+-      favorite: false,
+-      icon: "⚡",
+-      color: "#F85149",
+-      visibility: "Internal"
+-    },
+-
+-    // Workspace 3 Projects
+-    {
+-      id: "p-9",
+-      workspaceId: "ws-3",
+-      name: "My Indie Projects Repo",
+-      description: "Playground for experiments, helper scripts, and boilerplate templates.",
+-      owner: "Arjun Mehta",
+-      createdDate: "2026-01-01",
+-      repositoryCount: 12,
+-      repoHealths: [80, 82, 85, 81, 84, 82, 80, 83, 82, 85, 80, 82],
+-      lastAnalysis: "1 week ago",
+-      healthScore: 82,
+-      favorite: true,
+-      icon: "🏠",
+-      color: "#3D8B7A",
+-      visibility: "Private"
+-    }
+-  ]);
+-
+-  // --- Filtering & Search ---
+-  const [searchQuery, setSearchQuery] = useState("");
+-  const [filterStatus, setFilterStatus] = useState("all"); // all | healthy | warning | critical
+-  const [filterRepoCount, setFilterRepoCount] = useState("all"); // all | single | multiple
+-  const [filterFavorite, setFilterFavorite] = useState(false);
+-  const [sortBy, setSortBy] = useState("recent"); // recent | name | health
+-
+-  // --- Keyboard Shortcuts Search Box ---
+-  const searchInputRef = useRef(null);
+-  useEffect(() => {
+-    const handleKeyDown = (e) => {
+-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+-        e.preventDefault();
+-        searchInputRef.current?.focus();
+-      }
+-    };
+-    window.addEventListener("keydown", handleKeyDown);
+-    return () => window.removeEventListener("keydown", handleKeyDown);
+-  }, []);
+-
+-  // --- Create Project Modal Form ---
+-  const [isModalOpen, setIsModalOpen] = useState(false);
+-  const [modalStep, setModalStep] = useState("form"); // form | loading | success
+-  const [formName, setFormName] = useState("");
+-  const [formDesc, setFormDesc] = useState("");
+-  const [formIcon, setFormIcon] = useState("🌐");
+-  const [formColor, setFormColor] = useState("#3D8B7A");
+-  const [formVisibility, setFormVisibility] = useState("Private");
+-  const [formErrors, setFormErrors] = useState({});
+-
+-  // --- Card Action Menu ---
+-  const [activeMenuId, setActiveMenuId] = useState(null);
+-  const menuRef = useRef(null);
+-
+-  useEffect(() => {
+-    const clickOutside = (e) => {
+-      if (menuRef.current && !menuRef.current.contains(e.target)) {
+-        setActiveMenuId(null);
+-      }
+-    };
+-    document.addEventListener("mousedown", clickOutside);
+-    return () => document.removeEventListener("mousedown", clickOutside);
+-  }, []);
+-
+-  // --- Workspace Switch helper ---
+-  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId) || workspaces[0];
+-
+-  // --- Calculations ---
+-  const activeWorkspaceProjects = projects.filter(p => p.workspaceId === activeWorkspaceId);
+-
+-  const filteredProjects = activeWorkspaceProjects.filter(p => {
+-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+-                          p.description.toLowerCase().includes(searchQuery.toLowerCase());
+-    
+-    let matchesStatus = true;
+-    if (filterStatus === "healthy") matchesStatus = p.healthScore >= 85;
+-    else if (filterStatus === "warning") matchesStatus = p.healthScore >= 70 && p.healthScore < 85;
+-    else if (filterStatus === "critical") matchesStatus = p.healthScore < 70;
+-
+-    let matchesRepo = true;
+-    if (filterRepoCount === "single") matchesRepo = p.repositoryCount <= 1;
+-    else if (filterRepoCount === "multiple") matchesRepo = p.repositoryCount > 1;
+-
+-    const matchesFav = filterFavorite ? p.favorite === true : true;
+-
+-    return matchesSearch && matchesStatus && matchesRepo && matchesFav;
+-  }).sort((a, b) => {
+-    if (sortBy === "name") return a.name.localeCompare(b.name);
+-    if (sortBy === "health") return b.healthScore - a.healthScore;
+-    return 1; // default fallback keeps creation order/recent
+-  });
+-
+-  const totalWorkspaceRepos = activeWorkspaceProjects.reduce((acc, p) => acc + p.repositoryCount, 0);
+-  const avgHealth = Math.round(activeWorkspaceProjects.reduce((acc, p) => acc + p.healthScore, 0) / (activeWorkspaceProjects.length || 1));
+-  const indexedDepsCount = activeWorkspaceProjects.reduce((acc, p) => acc + p.repositoryCount * 187, 0);
+-
+-  // --- Actions ---
+-  const handleToggleFavorite = (projId) => {
+-    setProjects(prev => prev.map(p => p.id === projId ? { ...p, favorite: !p.favorite } : p));
+-  };
+-
+-  const handleDuplicateProject = (proj) => {
+-    const newProj = {
+-      ...proj,
+-      id: "p-" + Date.now(),
+-      name: `${proj.name} (Copy)`,
+-      createdDate: new Date().toISOString().split("T")[0],
+-      favorite: false
+-    };
+-    setProjects(prev => [...prev, newProj]);
+-    setActiveMenuId(null);
+-  };
+-
+-  const handleDeleteProject = (projId) => {
+-    if (confirm("Are you sure you want to delete this project? All meta histories will be lost.")) {
+-      setProjects(prev => prev.filter(p => p.id !== projId));
+-    }
+-    setActiveMenuId(null);
+-  };
+-
+-  const handleCreateWorkspace = (e) => {
+-    e.preventDefault();
+-    if (!newWsName.trim()) return;
+-    const newId = "ws-" + Date.now();
+-    const newWs = {
+-      id: newId,
+-      name: newWsName,
+-      avatar: newWsName.substring(0, 2).toUpperCase(),
+-      members: ["AM"],
+-      projectCount: 0
+-    };
+-    setWorkspaces(prev => [...prev, newWs]);
+-    setActiveWorkspaceId(newId);
+-    setNewWsName("");
+-    setIsCreateWsOpen(false);
+-  };
+-
+-  const handleCreateProjectSubmit = (e) => {
+-    e.preventDefault();
+-    const errors = {};
+-    if (!formName.trim()) errors.name = "Project name is required.";
+-    else if (formName.length < 3) errors.name = "Name must be at least 3 characters.";
+-
+-    if (Object.keys(errors).length > 0) {
+-      setFormErrors(errors);
+-      return;
+-    }
+-
+-    setFormErrors({});
+-    setModalStep("loading");
+-
+-    // Simulate database / indexing latency
+-    setTimeout(() => {
+-      const newProjObj = {
+-        id: "p-" + Date.now(),
+-        workspaceId: activeWorkspaceId,
+-        name: formName,
+-        description: formDesc || "No description provided.",
+-        owner: "Arjun Mehta",
+-        createdDate: new Date().toISOString().split("T")[0],
+-        repositoryCount: 0,
+-        repoHealths: [],
+-        lastAnalysis: "Never",
+-        healthScore: 100,
+-        favorite: false,
+-        icon: formIcon,
+-        color: formColor,
+-        visibility: formVisibility
+-      };
+-
+-      setProjects(prev => [newProjObj, ...prev]);
+-      setModalStep("success");
+-    }, 1500);
+-  };
+-
+-  const resetForm = () => {
+-    setFormName("");
+-    setFormDesc("");
+-    setFormIcon("🌐");
+-    setFormColor("#3D8B7A");
+-    setFormVisibility("Private");
+-    setFormErrors({});
+-    setModalStep("form");
+-    setIsModalOpen(false);
+-  };
+-
+-  // --- Dynamic State Overrides ---
+-  const simulateLoading = viewState === "loading";
+-  const simulateError = viewState === "error";
+-  const simulateEmpty = viewState === "empty" || activeWorkspaceProjects.length === 0;
+-
+-  return (
+-    <div className="page-in" style={{ padding: "24px 32px 64px", maxWidth: 1480, margin: "0 auto" }}>
+-      
+-      {/* Simulation Controller Row */}
+-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 24, padding: "8px 12px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, flexWrap: "wrap" }}>
+-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+-          <span style={{ color: T.faint, fontSize: 11, fontFamily: T.mono }}>PREVIEW STATE CONTROL:</span>
+-          {["loaded", "loading", "empty", "error"].map(state => (
+-            <button key={state} onClick={() => setViewState(state)} style={{
+-              background: viewState === state ? T.accentSoft : "transparent",
+-              color: viewState === state ? T.accentBright : T.faint,
+-              border: `1px solid ${viewState === state ? T.accentBorder : "transparent"}`,
+-              borderRadius: T.r4,
+-              padding: "4px 8px",
+-              cursor: "pointer",
+-              fontSize: 11,
+-              fontWeight: 500,
+-              textTransform: "capitalize",
+-            }}>{state}</button>
+-          ))}
+-        </div>
+-        <div style={{ fontSize: 11, color: T.faint, fontFamily: T.mono }}>
+-          ⚡ CODERITZ AI Workspace Orchestrator v1.4
+-        </div>
+-      </div>
+-
+-      {/* --- HEADER SECTION --- */}
+-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, marginBottom: 28, flexWrap: "wrap" }}>
+-        <div>
+-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+-            <span style={{ fontSize: 12, fontWeight: 600, color: T.accentBright, textTransform: "uppercase", letterSpacing: "0.05em" }}>Workspaces</span>
+-            <span style={{ width: 4, height: 4, borderRadius: "50%", background: T.faint }} />
+-            <span style={{ fontSize: 12, color: T.faint }}>Project Directory</span>
+-          </div>
+-          
+-          <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative" }}>
+-            {/* Workspace Avatar */}
+-            <div style={{ width: 32, height: 32, borderRadius: T.r8, background: T.accentSoft, border: `1px solid ${T.accentBorder}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: T.accentBright, fontSize: 14 }}>
+-              {activeWorkspace.avatar}
+-            </div>
+-
+-            <div style={{ display: "flex", flexDirection: "column" }}>
+-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+-                <h1 style={{ fontSize: 24, fontWeight: 700, color: T.text, letterSpacing: "-0.02em" }}>
+-                  {activeWorkspace.name}
+-                </h1>
+-
+-                {/* Pulsing Active Syncing Indicator */}
+-                <span 
+-                  title="Workspace syncing with VCS provider"
+-                  style={{
+-                    display: "inline-flex",
+-                    alignItems: "center",
+-                    gap: 6,
+-                    padding: "3px 8px",
+-                    background: "rgba(63,185,80,0.12)",
+-                    border: `1px solid ${T.success}33`,
+-                    borderRadius: 999,
+-                    fontSize: 10,
+-                    fontWeight: 600,
+-                    color: T.success
+-                  }}
+-                >
+-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.success, animation: "pulseGreen 1.5s infinite" }} />
+-                  Live Sync
+-                </span>
+-
+-                {/* Dropdown Toggle */}
+-                <button 
+-                  onClick={() => setWsDropdownOpen(prev => !prev)}
+-                  style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.dim, borderRadius: T.r6, padding: 6, display: "flex", cursor: "pointer" }}
+-                  aria-label="Switch workspace"
+-                >
+-                  <Icons.chevronDown />
+-                </button>
+-              </div>
+-            </div>
+-
+-            {/* Switch Workspace Dropdown */}
+-            {wsDropdownOpen && (
+-              <div className="nav-dropdown" style={{ position: "absolute", top: "100%", left: 0, marginTop: 8, background: T.surfaceEl, border: `1px solid ${T.borderMid}`, borderRadius: T.r8, padding: 8, width: 260, boxShadow: T.shadowLg, zIndex: 100 }}>
+-                <p style={{ fontSize: 11, color: T.faint, padding: "4px 8px" }}>Select Workspace</p>
+-                {workspaces.map(ws => (
+-                  <button
+-                    key={ws.id}
+-                    onClick={() => {
+-                      setActiveWorkspaceId(ws.id);
+-                      setWsDropdownOpen(false);
+-                    }}
+-                    style={{
+-                      width: "100%",
+-                      display: "flex",
+-                      alignItems: "center",
+-                      gap: 10,
+-                      padding: "8px 10px",
+-                      borderRadius: T.r6,
+-                      background: activeWorkspaceId === ws.id ? T.accentSoft : "transparent",
+-                      border: "none",
+-                      color: activeWorkspaceId === ws.id ? T.accentBright : T.dim,
+-                      cursor: "pointer",
+-                      textAlign: "left"
+-                    }}
+-                    onMouseEnter={e => { if (activeWorkspaceId !== ws.id) e.currentTarget.style.background = T.surfaceHov; }}
+-                    onMouseLeave={e => { if (activeWorkspaceId !== ws.id) e.currentTarget.style.background = "transparent"; }}
+-                  >
+-                    <div style={{ width: 22, height: 22, borderRadius: T.r4, background: activeWorkspaceId === ws.id ? T.accentBorder : T.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700 }}>
+-                      {ws.avatar}
+-                    </div>
+-                    <div style={{ flex: 1 }}>
+-                      <div style={{ fontSize: 12, fontWeight: 500 }}>{ws.name}</div>
+-                      <div style={{ fontSize: 10, color: T.faint }}>{ws.members.length} members · {projects.filter(p => p.workspaceId === ws.id).length} projects</div>
+-                    </div>
+-                    {activeWorkspaceId === ws.id && <span style={{ color: T.accentBright }}>✓</span>}
+-                  </button>
+-                ))}
+-
+-                <div style={{ height: 1, background: T.border, margin: "6px 0" }} />
+-                
+-                {isCreateWsOpen ? (
+-                  <form onSubmit={handleCreateWorkspace} style={{ padding: "4px 8px" }}>
+-                    <input 
+-                      type="text"
+-                      placeholder="Workspace name..."
+-                      value={newWsName}
+-                      onChange={e => setNewWsName(e.target.value)}
+-                      style={{ width: "100%", background: T.bg, border: `1px solid ${T.borderMid}`, borderRadius: T.r4, color: T.text, fontSize: 12, padding: "5px 8px", outline: "none", marginBottom: 6 }}
+-                    />
+-                    <div style={{ display: "flex", gap: 4 }}>
+-                      <button type="submit" style={{ flex: 1, background: T.accent, border: "none", borderRadius: T.r4, color: "#fff", fontSize: 11, padding: "4px 0", cursor: "pointer" }}>Create</button>
+-                      <button type="button" onClick={() => setIsCreateWsOpen(false)} style={{ flex: 1, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.dim, fontSize: 11, padding: "4px 0", cursor: "pointer" }}>Cancel</button>
+-                    </div>
+-                  </form>
+-                ) : (
+-                  <button 
+-                    onClick={() => setIsCreateWsOpen(true)}
+-                    style={{ width: "100%", background: "none", border: "none", padding: "8px 10px", borderRadius: T.r6, cursor: "pointer", color: T.accentBright, fontSize: 12, textAlign: "left", display: "flex", alignItems: "center", gap: 6 }}
+-                  >
+-                    <span>+</span> Create New Workspace
+-                  </button>
+-                )}
+-              </div>
+-            )}
+-          </div>
+-        </div>
+-
+-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+-          {/* Workspace Members Avatars */}
+-          <div style={{ display: "flex", alignItems: "center", marginRight: 8 }}>
+-            {activeWorkspace.members.map((m, idx) => (
+-              <div 
+-                key={m} 
+-                title={`${m} (Collaborator)`}
+-                style={{ 
+-                  width: 28, 
+-                  height: 28, 
+-                  borderRadius: "50%", 
+-                  background: T.surfaceEl, 
+-                  border: `2px solid ${T.bg}`, 
+-                  color: T.dim, 
+-                  display: "flex", 
+-                  alignItems: "center", 
+-                  justifyContent: "center", 
+-                  fontSize: 10, 
+-                  fontWeight: 600,
+-                  marginLeft: idx === 0 ? 0 : -8,
+-                  zIndex: 10 - idx
+-                }}
+-              >
+-                {m}
+-              </div>
+-            ))}
+-            <button 
+-              title="Invite Members"
+-              style={{ width: 28, height: 28, borderRadius: "50%", background: T.surfaceEl, border: `2px solid ${T.bg}`, color: T.faint, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, marginLeft: -8, zIndex: 0, cursor: "pointer" }}
+-            >
+-              +
+-            </button>
+-          </div>
+-
+-          <DashButton onClick={() => alert("Workspace settings are configuration placeholders.")}>
+-            <Icons.settings /> Settings
+-          </DashButton>
+-
+-          <DashButton variant="primary" onClick={() => { setIsModalOpen(true); setModalStep("form"); }}>
+-            <span>+</span> Create Project
+-          </DashButton>
+-        </div>
+-      </header>
+-
+-      {/* --- ERROR STATE PANEL --- */}
+-      {simulateError && (
+-        <div style={{ background: `${T.error}0a`, border: `1px solid ${T.error}40`, borderRadius: T.r8, padding: "40px 24px", textAlign: "center", marginBottom: 32 }}>
+-          <div style={{ color: T.error, fontSize: 32, marginBottom: 12 }}>⚠️</div>
+-          <h3 style={{ fontSize: 16, fontWeight: 650, color: T.text, marginBottom: 8 }}>Failed to retrieve projects list</h3>
+-          <p style={{ fontSize: 13, color: T.dim
+<truncated 40057 bytes>
+
+NOTE: The output was truncated because it was too long. Use a more targeted query or a smaller range to get the information you need.

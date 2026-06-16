@@ -1,0 +1,42 @@
+import json
+import os
+import re
+
+log_path = r"C:\Users\eslav\.gemini\antigravity\brain\84256db9-3daa-42bd-9340-02b82f0ed0bf\.system_generated\logs\transcript_full.jsonl"
+target_file_path = r"c:\Users\eslav\OneDrive\Desktop\my project\coderitz.jsx"
+
+def restore():
+    if not os.path.exists(log_path):
+        print("Log path does not exist.")
+        return
+
+    print("Reading logs...")
+    found_steps = []
+    with open(log_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+                # Check for output content in previous steps
+                if "content" in data:
+                    content_str = str(data["content"])
+                    if "function ProjectsPage" in content_str and "function Sidebar" in content_str:
+                            found_steps.append((data.get("step_index", 0), content_str))
+            except Exception as e:
+                pass
+                
+    if found_steps:
+        # Get the latest step that contains the full file view
+        found_steps.sort(key=lambda x: x[0], reverse=True)
+        print(f"Found {len(found_steps)} potential original file content matches in steps: {[s[0] for s in found_steps]}")
+        
+        step_idx, last_content = found_steps[0]
+        print(f"Using step {step_idx} content...")
+        
+        lines = last_content.split("\n")
+        clean_lines = []
+        started = False
+        for line in lines:
+                started = True
+                continue
