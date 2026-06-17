@@ -10,6 +10,7 @@ class ActivityLog(Base):
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
     user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    repository_id = Column(String, ForeignKey("repositories.id", ondelete="SET NULL"), nullable=True, index=True)
     action = Column(String, nullable=False) # e.g. "Project Created"
     details = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

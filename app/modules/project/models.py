@@ -23,6 +23,7 @@ class Project(Base):
     workspace = relationship("Workspace", back_populates="projects")
     favorites = relationship("Favorite", back_populates="project", cascade="all, delete-orphan")
     activity_logs = relationship("ActivityLog", back_populates="project", cascade="all, delete-orphan")
+    repositories = relationship("Repository", back_populates="project", cascade="all, delete-orphan")
 
 class Favorite(Base):
     __tablename__ = "favorites"

@@ -9,6 +9,7 @@ from app.modules.auth.router import router as auth_router, user_router
 from app.modules.workspace.router import router as workspace_router
 from app.modules.project.router import router as project_router
 from app.modules.dashboard.router import router as dashboard_router
+from app.modules.repository.router import router as repository_router
 
 # Import database hooks to bootstrap metadata models dynamically
 from app.database.session import engine, Base
@@ -16,6 +17,7 @@ import app.modules.auth.models
 import app.modules.workspace.models
 import app.modules.project.models
 import app.modules.dashboard.models
+import app.modules.repository.models
 
 # Initialize logger logs
 setup_logging()
@@ -48,6 +50,7 @@ app.include_router(user_router, prefix=settings.API_V1_STR)
 app.include_router(workspace_router, prefix=settings.API_V1_STR)
 app.include_router(project_router, prefix=settings.API_V1_STR)
 app.include_router(dashboard_router, prefix=settings.API_V1_STR)
+app.include_router(repository_router, prefix=settings.API_V1_STR)
 
 @app.get("/", tags=["Root"])
 def root_status():

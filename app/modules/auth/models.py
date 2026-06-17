@@ -16,12 +16,18 @@ class User(Base):
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
     favorites = relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
     activity_logs = relationship("ActivityLog", back_populates="user")
-    
+
     workspaces = relationship(
         "Workspace",
         secondary="workspace_members",
         back_populates="members"
     )
+
+    # Repository module relationships
+    repositories = relationship("Repository", back_populates="owner", foreign_keys="Repository.owner_id")
+    repository_favorites = relationship("RepositoryFavorite", back_populates="user", cascade="all, delete-orphan")
+    repository_activity_logs = relationship("RepositoryActivity", back_populates="user")
+    upload_history = relationship("RepositoryUploadHistory", back_populates="uploader", foreign_keys="RepositoryUploadHistory.uploaded_by")
 
 class Session(Base):
     __tablename__ = "sessions"

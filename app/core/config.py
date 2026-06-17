@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     
     # DB Parameters
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./codescope.db")
+
+    # File uploads — configurable for cloud storage in production
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
     
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
