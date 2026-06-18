@@ -60,6 +60,17 @@ const Icon = ({ d, size = 16, stroke = T.faint, fill = "none", strokeWidth = 1.5
 );
 
 const Icons = {
+  upload: () => <Icon d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />,
+  gitBranch: () => <Icon d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9" />,
+  star: () => <Icon d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />,
+  starFilled: () => <Icon d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#D29922" stroke="#D29922" />,
+  moreH: () => <Icon d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth={2.5} />,
+  link: () => <Icon d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />,
+  file: () => <Icon d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6" />,
+  trash: () => <Icon d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />,
+  gridView: () => <Icon d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />,
+  listView: () => <Icon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
+  archive: () => <Icon d="M21 8v13H3V8M1 3h22v5H1zM10 12h4" />,
   logo: () => (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
       <rect x="1" y="1" width="18" height="18" rx="4" stroke={T.accent} strokeWidth="1.2"/>
@@ -119,6 +130,19 @@ const GLOBAL_CSS = `
   @keyframes pulseGreen { 0%,100%{box-shadow:0 0 0 0 rgba(63,185,80,0.4)} 50%{box-shadow:0 0 0 6px rgba(63,185,80,0)} }
   @keyframes shimmer { 100% { transform: translateX(100%); } }
   @keyframes progressSweep { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+  @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes dropPulse { 0%,100% { border-color: rgba(61,139,122,0.5); background: rgba(61,139,122,0.06); } 50% { border-color: rgba(61,139,122,0.9); background: rgba(61,139,122,0.12); } }
+  @keyframes uploadFill { from { width: 0%; } to { width: 100%; } }
+  @keyframes cardIn { from { opacity:0; transform:scale(0.97) translateY(8px); } to { opacity:1; transform:scale(1) translateY(0); } }
+  .repo-card { transition: border-color 0.16s, transform 0.16s, box-shadow 0.16s, background 0.16s; }
+  .repo-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.13) !important; box-shadow: 0 10px 32px rgba(0,0,0,0.28); }
+  .repo-card-new { animation: cardIn 0.3s ease; }
+  .drop-active { animation: dropPulse 1.2s ease infinite; }
+  .upload-tab { transition: color 0.15s, border-color 0.15s, background 0.15s; }
+  .repo-action-btn { transition: background 0.12s, color 0.12s; }
+  .repo-action-btn:hover { background: rgba(255,255,255,0.06) !important; }
+  .repo-list-row { transition: background 0.12s; }
+  .repo-list-row:hover { background: rgba(255,255,255,0.03) !important; }
   .sidebar-item { transition: background 0.12s, color 0.12s; }
   .sidebar-item:hover { background: ${T.surfaceHov} !important; color: ${T.text} !important; }
   .sidebar-item.active { background: ${T.accentSoft} !important; color: ${T.accentBright} !important; }
@@ -2297,9 +2321,639 @@ function ProjectsPage() {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   REPOSITORIES PAGE — PROMPT 5
+═══════════════════════════════════════════════════════════════════════════ */
+
+const LANG_COLORS = {
+  TypeScript: "#4EADA0", Go: "#79C0FF", Java: "#F0883E",
+  Python: "#58A6FF", React: "#61DAFB", JavaScript: "#D29922",
+  Rust: "#F85149", Ruby: "#FF6B6B", "C#": "#9B59B6", PHP: "#8892BF",
+};
+
+const STATUS_META = {
+  uploaded:  { label: "Uploaded",  color: "#4EADA0" },
+  connected: { label: "Connected", color: "#58A6FF" },
+  pending:   { label: "Pending",   color: "#D29922" },
+  archived:  { label: "Archived",  color: "rgba(240,239,236,0.35)" },
+  error:     { label: "Error",     color: "#F85149" },
+};
+
+const MOCK_REPOS = [
+  { id: "r1", name: "main-api", description: "Core REST API gateway powering all client-facing services", language: "TypeScript", branch: "main", status: "uploaded", visibility: "Private", size: "14.2 MB", last: "12 min ago", analysisStatus: "Not analyzed" },
+  { id: "r2", name: "payments-service", description: "Payment processing microservice with Stripe and PayPal integrations", language: "Go", branch: "release/2.4", status: "connected", visibility: "Private", size: "8.7 MB", last: "38 min ago", analysisStatus: "Not analyzed" },
+  { id: "r3", name: "auth-gateway", description: "OAuth2 + JWT authentication and authorization gateway", language: "Java", branch: "main", status: "uploaded", visibility: "Internal", size: "22.1 MB", last: "1 hr ago", analysisStatus: "Not analyzed" },
+  { id: "r4", name: "frontend-platform", description: "React + Vite frontend monorepo with shared design system", language: "React", branch: "develop", status: "pending", visibility: "Public", size: "—", last: "2 hr ago", analysisStatus: "Not analyzed" },
+  { id: "r5", name: "data-pipeline", description: "ETL pipeline for analytics ingestion and transformation", language: "Python", branch: "main", status: "archived", visibility: "Private", size: "45.3 MB", last: "3 days ago", analysisStatus: "Not analyzed" },
+  { id: "r6", name: "search-indexer", description: "Full-text search indexing service built on Elasticsearch", language: "Go", branch: "feat/v3", status: "connected", visibility: "Internal", size: "—", last: "5 hr ago", analysisStatus: "Not analyzed" },
+];
+
+/* ─── RepoBadge ──────────────────────────────────────────────────────────── */
+function RepoBadge({ status }) {
+  const m = STATUS_META[status] || STATUS_META.pending;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 20, background: `${m.color}18`, border: `1px solid ${m.color}44`, fontSize: 11, fontWeight: 500, color: m.color, whiteSpace: "nowrap" }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: m.color, flexShrink: 0 }} />
+      {m.label}
+    </span>
+  );
+}
+
+/* ─── LangDot ────────────────────────────────────────────────────────────── */
+function LangDot({ lang }) {
+  const color = LANG_COLORS[lang] || T.faint;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: T.dim }}>
+      <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+      {lang || "Unknown"}
+    </span>
+  );
+}
+
+/* ─── VisibilityBadge ────────────────────────────────────────────────────── */
+function VisibilityBadge({ vis }) {
+  const colors = { Private: T.faint, Internal: T.warning, Public: T.success };
+  const color = colors[vis] || T.faint;
+  return (
+    <span style={{ fontSize: 11, color, background: `${color}16`, border: `1px solid ${color}33`, borderRadius: 4, padding: "2px 7px" }}>{vis}</span>
+  );
+}
+
+/* ─── RepoActionsMenu ────────────────────────────────────────────────────── */
+function RepoActionsMenu({ repo, onArchive, onDelete, onClose }) {
+  return (
+    <div
+      style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", background: T.surfaceEl, border: `1px solid ${T.borderMid}`, borderRadius: T.r8, padding: 6, minWidth: 160, boxShadow: T.shadowLg, zIndex: 100 }}
+      onClick={e => e.stopPropagation()}
+    >
+      {[
+        { label: "Open", icon: "→", action: onClose },
+        { label: "Edit details", icon: "✎", action: onClose },
+        { label: "Settings", icon: "⚙", action: onClose },
+      ].map(({ label, icon, action }) => (
+        <button key={label} onClick={action} className="repo-action-btn" style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "none", border: "none", color: T.dim, fontSize: 12, cursor: "pointer", borderRadius: T.r6, textAlign: "left" }}>
+          <span style={{ fontSize: 13, width: 16, color: T.faint }}>{icon}</span>{label}
+        </button>
+      ))}
+      <div style={{ height: 1, background: T.border, margin: "4px 0" }} />
+      <button onClick={() => { onArchive(repo.id); onClose(); }} className="repo-action-btn" style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "none", border: "none", color: T.dim, fontSize: 12, cursor: "pointer", borderRadius: T.r6, textAlign: "left" }}>
+        <span style={{ fontSize: 13, width: 16, color: T.faint }}>⊡</span>Archive
+      </button>
+      <button onClick={() => { onDelete(repo.id); onClose(); }} className="repo-action-btn" style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "none", border: "none", color: T.error, fontSize: 12, cursor: "pointer", borderRadius: T.r6, textAlign: "left" }}>
+        <span style={{ fontSize: 13, width: 16 }}>✕</span>Delete
+      </button>
+    </div>
+  );
+}
+
+/* ─── RepoCard (Grid View) ───────────────────────────────────────────────── */
+function RepoCard({ repo, isFav, onFav, onArchive, onDelete, isNew }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  useEffect(() => {
+    const handler = e => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const isArchived = repo.status === "archived";
+  return (
+    <article className={`repo-card ${isNew ? "repo-card-new" : ""}`} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 18, display: "flex", flexDirection: "column", gap: 14, position: "relative", opacity: isArchived ? 0.65 : 1 }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <div style={{ width: 34, height: 34, borderRadius: T.r6, background: T.surfaceEl, border: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <span style={{ color: LANG_COLORS[repo.language] || T.faint, fontSize: 10, fontFamily: T.mono, fontWeight: 700 }}>{(repo.language || "?").slice(0,2).toUpperCase()}</span>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 650, color: T.text, letterSpacing: "-0.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{repo.name}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
+              <span style={{ fontSize: 10, fontFamily: T.mono, color: T.faint }}>⎇ {repo.branch}</span>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+          <button onClick={() => onFav(repo.id)} aria-label={isFav ? "Remove favorite" : "Add favorite"} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: isFav ? "#D29922" : T.faint, fontSize: 15, display: "flex", alignItems: "center", borderRadius: T.r4 }}>
+            {isFav ? "★" : "☆"}
+          </button>
+          <div style={{ position: "relative" }} ref={menuRef}>
+            <button onClick={() => setMenuOpen(o => !o)} aria-label="Actions" style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", color: T.faint, display: "flex", alignItems: "center", borderRadius: T.r4, fontSize: 18, lineHeight: 1 }}>···</button>
+            {menuOpen && <RepoActionsMenu repo={repo} onArchive={onArchive} onDelete={onDelete} onClose={() => setMenuOpen(false)} />}
+          </div>
+        </div>
+      </div>
+
+      {/* Description */}
+      <p style={{ fontSize: 12, color: T.dim, lineHeight: "1.5", minHeight: 36 }}>{repo.description}</p>
+
+      {/* Meta chips */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+        <LangDot lang={repo.language} />
+        <span style={{ width: 3, height: 3, borderRadius: "50%", background: T.faint }} />
+        <RepoBadge status={repo.status} />
+        <span style={{ width: 3, height: 3, borderRadius: "50%", background: T.faint }} />
+        <VisibilityBadge vis={repo.visibility} />
+      </div>
+
+      {/* Footer */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${T.border}`, paddingTop: 12 }}>
+        <div style={{ display: "flex", gap: 14 }}>
+          <span style={{ fontSize: 11, color: T.faint }}>📦 {repo.size}</span>
+          <span style={{ fontSize: 11, color: T.faint }}>🕐 {repo.last}</span>
+        </div>
+        <span style={{ fontSize: 11, color: T.faint, fontFamily: T.mono }}>{repo.analysisStatus}</span>
+      </div>
+    </article>
+  );
+}
+
+/* ─── RepoListRow (List View) ────────────────────────────────────────────── */
+function RepoListRow({ repo, isFav, onFav, onArchive, onDelete, isNew }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  useEffect(() => {
+    const handler = e => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className={`repo-list-row ${isNew ? "repo-card-new" : ""}`} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderBottom: `1px solid ${T.border}`, opacity: repo.status === "archived" ? 0.6 : 1 }}>
+      <div style={{ width: 28, height: 28, borderRadius: T.r6, background: T.surfaceEl, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <span style={{ fontSize: 9, fontFamily: T.mono, color: LANG_COLORS[repo.language] || T.faint, fontWeight: 700 }}>{(repo.language || "?").slice(0,2).toUpperCase()}</span>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{repo.name}</div>
+        <div style={{ fontSize: 11, color: T.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{repo.description}</div>
+      </div>
+      <LangDot lang={repo.language} />
+      <span style={{ fontSize: 11, fontFamily: T.mono, color: T.faint, minWidth: 80, textAlign: "center" }}>⎇ {repo.branch}</span>
+      <RepoBadge status={repo.status} />
+      <VisibilityBadge vis={repo.visibility} />
+      <span style={{ fontSize: 11, color: T.faint, minWidth: 60, textAlign: "right" }}>{repo.last}</span>
+      <button onClick={() => onFav(repo.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: isFav ? "#D29922" : T.faint, padding: 4, flexShrink: 0 }}>{isFav ? "★" : "☆"}</button>
+      <div style={{ position: "relative" }} ref={menuRef}>
+        <button onClick={() => setMenuOpen(o => !o)} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, fontSize: 18, padding: 4, lineHeight: 1, flexShrink: 0 }}>···</button>
+        {menuOpen && <RepoActionsMenu repo={repo} onArchive={onArchive} onDelete={onDelete} onClose={() => setMenuOpen(false)} />}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Skeleton Cards ─────────────────────────────────────────────────────── */
+function RepoSkeletonGrid() {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+      {[1,2,3,4,5,6].map(i => (
+        <div key={i} className="dash-skeleton" style={{ height: 210, borderRadius: T.r8 }} />
+      ))}
+    </div>
+  );
+}
+
+function RepoSkeletonList() {
+  return (
+    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, overflow: "hidden" }}>
+      {[1,2,3,4,5].map(i => (
+        <div key={i} className="dash-skeleton" style={{ height: 56, borderRadius: 0, marginBottom: 1 }} />
+      ))}
+    </div>
+  );
+}
+
+/* ─── Empty State ────────────────────────────────────────────────────────── */
+function RepoEmptyState({ onUpload, onGit }) {
+  return (
+    <div style={{ textAlign: "center", padding: "64px 24px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r12, animation: "fadeIn 0.3s ease" }}>
+      <div style={{ width: 72, height: 72, borderRadius: "50%", background: T.accentSoft, border: `1px solid ${T.accentBorder}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={T.accentBright} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+        </svg>
+      </div>
+      <h3 style={{ fontSize: 18, fontWeight: 650, color: T.text, marginBottom: 8, letterSpacing: "-0.02em" }}>No repositories yet</h3>
+      <p style={{ fontSize: 13, color: T.dim, maxWidth: 440, margin: "0 auto 28px", lineHeight: "1.6" }}>
+        Repositories are the source code units that CodeScope AI will index and analyze. Add a ZIP archive or connect a remote Git URL to get started.
+      </p>
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+        <button onClick={onUpload} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", background: T.accent, border: "none", borderRadius: T.r6, color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>⬆ Upload ZIP</button>
+        <button onClick={onGit} style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 13, cursor: "pointer" }}>⎇ Connect Git</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Error State ────────────────────────────────────────────────────────── */
+function RepoErrorState({ onRetry }) {
+  return (
+    <div style={{ textAlign: "center", padding: "64px 24px", background: `${T.error}08`, border: `1px solid ${T.error}30`, borderRadius: T.r12 }}>
+      <div style={{ fontSize: 36, marginBottom: 12 }}>⚠</div>
+      <h3 style={{ fontSize: 16, fontWeight: 650, color: T.text, marginBottom: 6 }}>Unable to load repositories</h3>
+      <p style={{ fontSize: 13, color: T.dim, marginBottom: 24 }}>Check your project connection and try again.</p>
+      <button onClick={onRetry} style={{ padding: "8px 20px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 12, cursor: "pointer" }}>Retry</button>
+    </div>
+  );
+}
+
+/* ─── DropZone ───────────────────────────────────────────────────────────── */
+function DropZone({ onFile, selectedFile }) {
+  const [drag, setDrag] = useState(false);
+  const inputRef = useRef(null);
+
+  const handleDrop = e => {
+    e.preventDefault(); setDrag(false);
+    const f = e.dataTransfer.files[0];
+    if (f) onFile(f);
+  };
+
+  return (
+    <div
+      className={drag ? "drop-active" : ""}
+      onDragOver={e => { e.preventDefault(); setDrag(true); }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={handleDrop}
+      onClick={() => !selectedFile && inputRef.current?.click()}
+      style={{ border: `2px dashed ${drag ? T.accentBright : T.borderMid}`, borderRadius: T.r8, padding: "36px 24px", textAlign: "center", cursor: selectedFile ? "default" : "pointer", background: drag ? T.accentSoft : T.bg, transition: "all 0.2s" }}
+    >
+      <input ref={inputRef} type="file" accept=".zip" style={{ display: "none" }} onChange={e => { if (e.target.files[0]) onFile(e.target.files[0]); }} />
+      {selectedFile ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center" }}>
+          <span style={{ fontSize: 28 }}>📦</span>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{selectedFile.name}</div>
+            <div style={{ fontSize: 11, color: T.faint }}>{(selectedFile.size / 1024 / 1024).toFixed(2)} MB · ZIP archive</div>
+          </div>
+          <button onClick={e => { e.stopPropagation(); onFile(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, fontSize: 18, marginLeft: 8 }}>✕</button>
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>📂</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: T.dim, marginBottom: 4 }}>Drop your ZIP archive here</div>
+          <div style={{ fontSize: 12, color: T.faint, marginBottom: 14 }}>or click to browse files</div>
+          <span style={{ fontSize: 11, color: T.faint, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "3px 10px" }}>.zip only · any size</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── Upload Modal ───────────────────────────────────────────────────────── */
+function UploadModal({ onClose, onRepoAdded, initialTab = "zip" }) {
+  const [tab, setTab] = useState(initialTab);
+  const [file, setFile] = useState(null);
+  const [progress, setProgress] = useState(null); // null | 0-100
+  const [done, setDone] = useState(false);
+  // ZIP form fields
+  const [repoName, setRepoName] = useState("");
+  const [repoDesc, setRepoDesc] = useState("");
+  const [repoVis, setRepoVis] = useState("Private");
+  // Git form fields
+  const [gitUrl, setGitUrl] = useState("");
+  const [gitBranch, setGitBranch] = useState("main");
+  const [gitName, setGitName] = useState("");
+  const [gitDesc, setGitDesc] = useState("");
+  const [gitVis, setGitVis] = useState("Private");
+  const [errors, setErrors] = useState({});
+
+  const handleUpload = () => {
+    const errs = {};
+    if (!repoName.trim()) errs.name = "Repository name is required";
+    if (!file) errs.file = "Please select a ZIP file";
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setErrors({});
+    setProgress(0);
+    let p = 0;
+    const iv = setInterval(() => {
+      p += Math.random() * 18 + 5;
+      if (p >= 100) { p = 100; clearInterval(iv); setDone(true);
+        setTimeout(() => {
+          onRepoAdded({ id: `r${Date.now()}`, name: repoName, description: repoDesc || "Uploaded repository", language: "Unknown", branch: "main", status: "uploaded", visibility: repoVis, size: `${(file.size/1024/1024).toFixed(1)} MB`, last: "Just now", analysisStatus: "Not analyzed" });
+          onClose();
+        }, 800);
+      }
+      setProgress(Math.min(Math.round(p), 100));
+    }, 160);
+  };
+
+  const handleGitConnect = () => {
+    const errs = {};
+    if (!gitName.trim()) errs.gitName = "Repository name is required";
+    if (!gitUrl.trim()) errs.gitUrl = "Git URL is required";
+    if (gitUrl && !gitUrl.startsWith("http")) errs.gitUrl = "URL must start with http:// or https://";
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setErrors({});
+    onRepoAdded({ id: `r${Date.now()}`, name: gitName, description: gitDesc || "Git connected repository", language: "Unknown", branch: gitBranch || "main", status: "connected", visibility: gitVis, size: "—", last: "Just now", analysisStatus: "Not analyzed" });
+    onClose();
+  };
+
+  const tabStyle = active => ({
+    flex: 1, padding: "9px 0", background: "none", border: "none", borderBottom: `2px solid ${active ? T.accentBright : "transparent"}`, color: active ? T.accentBright : T.faint, fontSize: 13, fontWeight: active ? 600 : 400, cursor: "pointer", transition: "all 0.15s"
+  });
+
+  const fieldStyle = err => ({ width: "100%", background: T.bg, border: `1px solid ${err ? T.error : T.borderMid}`, borderRadius: T.r6, color: T.text, padding: "9px 12px", fontSize: 13, outline: "none" });
+  const labelStyle = { fontSize: 11, fontWeight: 500, color: T.dim, marginBottom: 5, display: "block" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20, animation: "fadeIn 0.15s ease" }} onClick={onClose}>
+      <div style={{ background: T.surface, border: `1px solid ${T.borderMid}`, borderRadius: T.r12, width: "100%", maxWidth: 500, boxShadow: T.shadowLg, animation: "slideUp 0.22s ease", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ padding: "18px 22px 0", borderBottom: `1px solid ${T.border}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 650, color: T.text, letterSpacing: "-0.02em" }}>Add Repository</h3>
+            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.faint, fontSize: 18, lineHeight: 1 }}>✕</button>
+          </div>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 0 }}>
+            <button className="upload-tab" style={tabStyle(tab === "zip")} onClick={() => setTab("zip")}>⬆ Upload ZIP</button>
+            <button className="upload-tab" style={tabStyle(tab === "git")} onClick={() => setTab("git")}>⎇ Connect Git</button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "22px 22px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+          {tab === "zip" && (
+            <>
+              <div>
+                <label style={labelStyle}>Repository Name *</label>
+                <input value={repoName} onChange={e => setRepoName(e.target.value)} placeholder="e.g. auth-service" style={fieldStyle(errors.name)} />
+                {errors.name && <span style={{ fontSize: 11, color: T.error }}>{errors.name}</span>}
+              </div>
+              <div>
+                <label style={labelStyle}>Description</label>
+                <input value={repoDesc} onChange={e => setRepoDesc(e.target.value)} placeholder="Brief description..." style={fieldStyle(false)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Visibility</label>
+                <select value={repoVis} onChange={e => setRepoVis(e.target.value)} style={{ ...fieldStyle(false), cursor: "pointer" }}>
+                  <option>Private</option><option>Internal</option><option>Public</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>ZIP File *</label>
+                <DropZone onFile={setFile} selectedFile={file} />
+                {errors.file && <span style={{ fontSize: 11, color: T.error }}>{errors.file}</span>}
+              </div>
+              {progress !== null && (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, color: T.dim }}>{done ? "Upload complete!" : "Uploading…"}</span>
+                    <span style={{ fontSize: 12, fontFamily: T.mono, color: done ? T.success : T.accentBright }}>{progress}%</span>
+                  </div>
+                  <div style={{ height: 6, background: T.surfaceEl, borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${progress}%`, background: done ? T.success : T.accentBright, borderRadius: 99, transition: "width 0.15s ease" }} />
+                  </div>
+                </div>
+              )}
+              {progress === null && (
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <button onClick={onClose} style={{ padding: "8px 16px", background: "none", border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                  <button onClick={handleUpload} style={{ padding: "8px 18px", background: T.accent, border: "none", borderRadius: T.r6, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Upload Repository</button>
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === "git" && (
+            <>
+              <div>
+                <label style={labelStyle}>Repository Name *</label>
+                <input value={gitName} onChange={e => setGitName(e.target.value)} placeholder="e.g. payments-service" style={fieldStyle(errors.gitName)} />
+                {errors.gitName && <span style={{ fontSize: 11, color: T.error }}>{errors.gitName}</span>}
+              </div>
+              <div>
+                <label style={labelStyle}>Git URL *</label>
+                <input value={gitUrl} onChange={e => setGitUrl(e.target.value)} placeholder="https://github.com/org/repo" style={fieldStyle(errors.gitUrl)} />
+                {errors.gitUrl && <span style={{ fontSize: 11, color: T.error }}>{errors.gitUrl}</span>}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Branch</label>
+                  <input value={gitBranch} onChange={e => setGitBranch(e.target.value)} placeholder="main" style={fieldStyle(false)} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Visibility</label>
+                  <select value={gitVis} onChange={e => setGitVis(e.target.value)} style={{ ...fieldStyle(false), cursor: "pointer" }}>
+                    <option>Private</option><option>Internal</option><option>Public</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Description</label>
+                <input value={gitDesc} onChange={e => setGitDesc(e.target.value)} placeholder="Brief description..." style={fieldStyle(false)} />
+              </div>
+              <div style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "10px 14px" }}>
+                <p style={{ fontSize: 12, color: T.faint }}>ℹ️ The repository URL will be stored but <strong style={{ color: T.dim }}>not cloned yet</strong>. Analysis and cloning happen in Phase 3.</p>
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button onClick={onClose} style={{ padding: "8px 16px", background: "none", border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                <button onClick={handleGitConnect} style={{ padding: "8px 18px", background: T.accent, border: "none", borderRadius: T.r6, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Connect Repository</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── REPOSITORIES PAGE ──────────────────────────────────────────────────── */
+function RepositoriesPage() {
+  const [viewState, setViewState] = useState("loaded"); // loading|loaded|empty|error
+  const [viewMode, setViewMode] = useState("grid");     // grid|list
+  const [repos, setRepos] = useState(MOCK_REPOS);
+  const [newIds, setNewIds] = useState(new Set());
+  const [favorites, setFavorites] = useState(new Set(["r2"]));
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [langFilter, setLangFilter] = useState("all");
+  const [visFilter, setVisFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("newest");
+  const [favOnly, setFavOnly] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalInitTab, setModalInitTab] = useState("zip");
+
+  const openUpload = (tab = "zip") => { setModalInitTab(tab); setModalOpen(true); };
+
+  const handleRepoAdded = repo => {
+    setRepos(prev => [repo, ...prev]);
+    setNewIds(prev => new Set([...prev, repo.id]));
+    setTimeout(() => setNewIds(prev => { const n = new Set(prev); n.delete(repo.id); return n; }), 1200);
+  };
+
+  const handleFav = id => setFavorites(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const handleArchive = id => setRepos(prev => prev.map(r => r.id === id ? { ...r, status: r.status === "archived" ? "uploaded" : "archived" } : r));
+  const handleDelete = id => setRepos(prev => prev.filter(r => r.id !== id));
+
+  // Filter + sort
+  let filtered = repos.filter(r => {
+    if (search && !r.name.toLowerCase().includes(search.toLowerCase()) && !r.description.toLowerCase().includes(search.toLowerCase())) return false;
+    if (statusFilter !== "all" && r.status !== statusFilter) return false;
+    if (langFilter !== "all" && r.language !== langFilter) return false;
+    if (visFilter !== "all" && r.visibility !== visFilter) return false;
+    if (favOnly && !favorites.has(r.id)) return false;
+    return true;
+  });
+  if (sortBy === "az") filtered = [...filtered].sort((a,b) => a.name.localeCompare(b.name));
+  if (sortBy === "za") filtered = [...filtered].sort((a,b) => b.name.localeCompare(a.name));
+  // newest = default order (already newest first)
+
+  const allLangs = [...new Set(repos.map(r => r.language).filter(Boolean))];
+
+  const isEmpty = viewState === "loaded" && filtered.length === 0 && !search && statusFilter === "all" && langFilter === "all" && visFilter === "all" && !favOnly;
+  const noResults = viewState === "loaded" && filtered.length === 0 && !isEmpty;
+
+  const StatePreview = () => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+      <span style={{ color: T.faint, fontSize: 11, fontFamily: T.mono }}>preview state:</span>
+      {["loaded","loading","empty","error"].map(s => (
+        <button key={s} onClick={() => setViewState(s)} style={{ background: viewState===s?T.accentSoft:T.surfaceEl, color: viewState===s?T.accentBright:T.faint, border: `1px solid ${viewState===s?T.accentBorder:T.border}`, borderRadius: T.r6, padding: "4px 10px", cursor: "pointer", fontSize: 11 }}>{s}</button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="page-in" style={{ padding: "28px 32px 48px", maxWidth: 1480, margin: "0 auto" }}>
+      <StatePreview />
+
+      {/* ── Page Header ── */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 650, color: T.text, letterSpacing: "-0.03em", marginBottom: 4 }}>Repositories</h1>
+          <p style={{ fontSize: 13, color: T.faint }}>Manage source code repositories attached to this project. Upload a ZIP or connect a remote Git URL.</p>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+          <button onClick={() => openUpload("git")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 12, cursor: "pointer" }}>⎇ Connect Git</button>
+          <button onClick={() => openUpload("zip")} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 16px", background: T.accent, border: "none", borderRadius: T.r6, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>⬆ Upload Repository</button>
+        </div>
+      </div>
+
+      {/* ── Stats Strip ── */}
+      {viewState === "loaded" && repos.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
+          {[
+            { label: "Total", value: repos.length, color: T.accentBright },
+            { label: "Uploaded", value: repos.filter(r=>r.status==="uploaded").length, color: T.accentBright },
+            { label: "Connected", value: repos.filter(r=>r.status==="connected").length, color: T.info },
+            { label: "Archived", value: repos.filter(r=>r.status==="archived").length, color: T.faint },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: "14px 16px" }}>
+              <div style={{ fontSize: 11, color: T.faint, marginBottom: 6 }}>{label}</div>
+              <div style={{ fontSize: 24, fontFamily: T.mono, fontWeight: 700, color }}>{value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Search + Filter Bar ── */}
+      {viewState === "loaded" && (
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 14, marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            {/* Search */}
+            <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+              <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.faint }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              </span>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search repositories…" aria-label="Search repositories" style={{ width: "100%", height: 36, background: T.bg, border: `1px solid ${T.borderMid}`, borderRadius: T.r6, color: T.text, padding: "0 12px 0 34px", fontSize: 13, outline: "none" }} />
+            </div>
+
+            {/* Status filter */}
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} aria-label="Filter by status" style={{ height: 36, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, padding: "0 10px", fontSize: 12, outline: "none", cursor: "pointer" }}>
+              <option value="all">All Status</option>
+              <option value="uploaded">Uploaded</option>
+              <option value="connected">Connected</option>
+              <option value="pending">Pending</option>
+              <option value="archived">Archived</option>
+            </select>
+
+            {/* Language filter */}
+            <select value={langFilter} onChange={e => setLangFilter(e.target.value)} aria-label="Filter by language" style={{ height: 36, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, padding: "0 10px", fontSize: 12, outline: "none", cursor: "pointer" }}>
+              <option value="all">All Languages</option>
+              {allLangs.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+
+            {/* Visibility filter */}
+            <select value={visFilter} onChange={e => setVisFilter(e.target.value)} aria-label="Filter by visibility" style={{ height: 36, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, padding: "0 10px", fontSize: 12, outline: "none", cursor: "pointer" }}>
+              <option value="all">All Visibility</option>
+              <option value="Private">Private</option>
+              <option value="Internal">Internal</option>
+              <option value="Public">Public</option>
+            </select>
+
+            {/* Sort */}
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)} aria-label="Sort by" style={{ height: 36, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, padding: "0 10px", fontSize: 12, outline: "none", cursor: "pointer" }}>
+              <option value="newest">Newest</option>
+              <option value="az">A → Z</option>
+              <option value="za">Z → A</option>
+            </select>
+
+            {/* Favorites toggle */}
+            <button onClick={() => setFavOnly(f => !f)} aria-label="Show favorites only" style={{ height: 36, padding: "0 14px", background: favOnly ? T.accentSoft : T.surfaceEl, border: `1px solid ${favOnly ? T.accentBorder : T.border}`, borderRadius: T.r6, color: favOnly ? T.accentBright : T.faint, fontSize: 12, cursor: "pointer", fontWeight: favOnly ? 500 : 400 }}>★ Favorites</button>
+
+            {/* View toggle */}
+            <div style={{ display: "flex", border: `1px solid ${T.border}`, borderRadius: T.r6, overflow: "hidden", flexShrink: 0 }}>
+              {[["grid","▦"],["list","≡"]].map(([mode, icon]) => (
+                <button key={mode} onClick={() => setViewMode(mode)} aria-label={`${mode} view`} style={{ padding: "6px 12px", background: viewMode===mode ? T.accentSoft : T.surfaceEl, border: "none", color: viewMode===mode ? T.accentBright : T.faint, cursor: "pointer", fontSize: 14 }}>{icon}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Active filter count */}
+          {(search || statusFilter !== "all" || langFilter !== "all" || visFilter !== "all" || favOnly) && (
+            <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, color: T.faint }}>{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+              <button onClick={() => { setSearch(""); setStatusFilter("all"); setLangFilter("all"); setVisFilter("all"); setFavOnly(false); }} style={{ fontSize: 11, color: T.accentBright, background: "none", border: "none", cursor: "pointer", padding: "2px 0" }}>Clear all filters</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Content Area ── */}
+      {viewState === "loading" && (viewMode === "grid" ? <RepoSkeletonGrid /> : <RepoSkeletonList />)}
+
+      {viewState === "error" && <RepoErrorState onRetry={() => setViewState("loaded")} />}
+
+      {viewState === "loaded" && isEmpty && (
+        <RepoEmptyState onUpload={() => openUpload("zip")} onGit={() => openUpload("git")} />
+      )}
+
+      {viewState === "loaded" && noResults && (
+        <div style={{ textAlign: "center", padding: "48px 24px", color: T.faint }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>🔍</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: T.dim, marginBottom: 6 }}>No repositories match your filters</div>
+          <button onClick={() => { setSearch(""); setStatusFilter("all"); setLangFilter("all"); setVisFilter("all"); setFavOnly(false); }} style={{ marginTop: 12, fontSize: 12, color: T.accentBright, background: "none", border: "none", cursor: "pointer" }}>Clear filters</button>
+        </div>
+      )}
+
+      {viewState === "loaded" && filtered.length > 0 && (
+        viewMode === "grid" ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+            {filtered.map(r => (
+              <RepoCard key={r.id} repo={r} isFav={favorites.has(r.id)} onFav={handleFav} onArchive={handleArchive} onDelete={handleDelete} isNew={newIds.has(r.id)} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 16px", borderBottom: `1px solid ${T.border}`, background: T.surfaceEl }}>
+              {["NAME","LANGUAGE","BRANCH","STATUS","VISIBILITY","UPDATED","",""].map((h,i) => (
+                <span key={i} style={{ fontSize: 10, fontWeight: 700, color: T.faint, letterSpacing: "0.06em", flex: i===0?1:"none", minWidth: [0,80,80,80,70,60,20,20][i]||"auto" }}>{h}</span>
+              ))}
+            </div>
+            {filtered.map(r => (
+              <RepoListRow key={r.id} repo={r} isFav={favorites.has(r.id)} onFav={handleFav} onArchive={handleArchive} onDelete={handleDelete} isNew={newIds.has(r.id)} />
+            ))}
+          </div>
+        )
+      )}
+
+      {/* ── Upload Modal ── */}
+      {modalOpen && <UploadModal onClose={() => setModalOpen(false)} onRepoAdded={handleRepoAdded} initialTab={modalInitTab} />}
+    </div>
+  );
+}
+
 function PageStub({ pageId, setActivePage }) {
   if (pageId === "dashboard") return <DashboardPage setActivePage={setActivePage} />;
   if (pageId === "projects") return <ProjectsPage />;
+  if (pageId === "repos")    return <RepositoriesPage />;
   
   const meta = PAGE_META[pageId] || { label: "Page", breadcrumb: [pageId] };
   return (
