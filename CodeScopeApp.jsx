@@ -882,6 +882,7 @@ const PAGE_META = {
   errors:     { label: "Error Investigation", breadcrumb: ["Dashboard", "Error Investigation"] },
   ai:         { label: "AI Assistant",        breadcrumb: ["Dashboard", "AI Assistant"] },
   settings:   { label: "Settings",            breadcrumb: ["Dashboard", "Settings"] },
+  'repo-overview': { label: "Repository Overview", breadcrumb: ["Dashboard", "Repositories", "frontend-platform"] },
 };
 
 const dashboardData = {
@@ -2407,7 +2408,7 @@ function RepoActionsMenu({ repo, onArchive, onDelete, onClose }) {
 }
 
 /* ─── RepoCard (Grid View) ───────────────────────────────────────────────── */
-function RepoCard({ repo, isFav, onFav, onArchive, onDelete, isNew }) {
+function RepoCard({ repo, isFav, onFav, onArchive, onDelete, isNew, onSelect }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   useEffect(() => {
@@ -2421,7 +2422,7 @@ function RepoCard({ repo, isFav, onFav, onArchive, onDelete, isNew }) {
     <article className={`repo-card ${isNew ? "repo-card-new" : ""}`} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 18, display: "flex", flexDirection: "column", gap: 14, position: "relative", opacity: isArchived ? 0.65 : 1 }}>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <div onClick={onSelect} style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, cursor: "pointer" }}>
           <div style={{ width: 34, height: 34, borderRadius: T.r6, background: T.surfaceEl, border: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <span style={{ color: LANG_COLORS[repo.language] || T.faint, fontSize: 10, fontFamily: T.mono, fontWeight: 700 }}>{(repo.language || "?").slice(0,2).toUpperCase()}</span>
           </div>
@@ -2468,7 +2469,7 @@ function RepoCard({ repo, isFav, onFav, onArchive, onDelete, isNew }) {
 }
 
 /* ─── RepoListRow (List View) ────────────────────────────────────────────── */
-function RepoListRow({ repo, isFav, onFav, onArchive, onDelete, isNew }) {
+function RepoListRow({ repo, isFav, onFav, onArchive, onDelete, isNew, onSelect }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   useEffect(() => {
@@ -2756,7 +2757,7 @@ function UploadModal({ onClose, onRepoAdded, initialTab = "zip" }) {
 }
 
 /* ─── REPOSITORIES PAGE ──────────────────────────────────────────────────── */
-function RepositoriesPage() {
+function RepositoriesPage({ setActivePage }) {
   const [viewState, setViewState] = useState("loaded"); // loading|loaded|empty|error
   const [viewMode, setViewMode] = useState("grid");     // grid|list
   const [repos, setRepos] = useState(MOCK_REPOS);
@@ -2927,7 +2928,7 @@ function RepositoriesPage() {
         viewMode === "grid" ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
             {filtered.map(r => (
-              <RepoCard key={r.id} repo={r} isFav={favorites.has(r.id)} onFav={handleFav} onArchive={handleArchive} onDelete={handleDelete} isNew={newIds.has(r.id)} />
+              <RepoCard key={r.id} repo={r} isFav={favorites.has(r.id)} onFav={handleFav} onArchive={handleArchive} onDelete={handleDelete} isNew={newIds.has(r.id)} onSelect={() => setActivePage('repo-overview')} />
             ))}
           </div>
         ) : (
@@ -2938,7 +2939,7 @@ function RepositoriesPage() {
               ))}
             </div>
             {filtered.map(r => (
-              <RepoListRow key={r.id} repo={r} isFav={favorites.has(r.id)} onFav={handleFav} onArchive={handleArchive} onDelete={handleDelete} isNew={newIds.has(r.id)} />
+              <RepoListRow key={r.id} repo={r} isFav={favorites.has(r.id)} onFav={handleFav} onArchive={handleArchive} onDelete={handleDelete} isNew={newIds.has(r.id)} onSelect={() => setActivePage('repo-overview')} />
             ))}
           </div>
         )
@@ -2950,10 +2951,281 @@ function RepositoriesPage() {
   );
 }
 
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REPOSITORY OVERVIEW PAGE
+═══════════════════════════════════════════════════════════════════════════ */
+
+function RepoOverviewHeader({ repo }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32 }}>
+      <div style={{ display: "flex", gap: 16 }}>
+        <div style={{ width: 56, height: 56, borderRadius: T.r8, background: T.surfaceEl, border: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 700, fontFamily: T.mono, color: LANG_COLORS[repo.language] || T.faint }}>
+          {repo.language.slice(0, 2).toUpperCase()}
+        </div>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+            <h1 style={{ fontSize: 24, fontWeight: 600, color: T.text, letterSpacing: "-0.02em", margin: 0 }}>{repo.name}</h1>
+            <RepoBadge status={repo.status} />
+            <VisibilityBadge vis={repo.visibility} />
+            <button aria-label="Favorite" style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#D29922", fontSize: 18 }}>★</button>
+          </div>
+          <p style={{ color: T.dim, fontSize: 14, marginBottom: 8, margin: "4px 0 8px 0" }}>{repo.description}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 12, color: T.faint }}>
+            <span>Project: {repo.project || "Default Project"}</span>
+            <span>⎇ {repo.branch}</span>
+            <span>🕐 Updated {repo.last}</span>
+          </div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <DashButton variant="ghost" title="Refresh"><span style={{fontSize:16}}>↻</span></DashButton>
+        <DashButton variant="secondary" title="Open Settings"><Icons.settings /></DashButton>
+        <DashButton variant="secondary" title="Archive"><Icons.archive /></DashButton>
+        <DashButton variant="secondary" title="Open Explorer"><Icons.file /></DashButton>
+        <DashButton variant="primary">Analyze Repository</DashButton>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub, color = T.text }) {
+  return (
+    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 20, display: "flex", flexDirection: "column", gap: 8 }}>
+      <span style={{ fontSize: 13, color: T.faint }}>{label}</span>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span style={{ fontSize: 28, fontWeight: 600, color }}>{value}</span>
+        {sub && <span style={{ fontSize: 12, color: T.dim }}>{sub}</span>}
+      </div>
+    </div>
+  );
+}
+
+function AnalysisTimeline() {
+  const steps = ["Repository Uploaded", "Waiting For Analysis", "Scanning", "Parsing", "Graph Generation", "Completed"];
+  const currentStep = 5; // Completed for this demo
+  return (
+    <WidgetShell title="Analysis Status">
+      <div style={{ display: "flex", justifyContent: "space-between", position: "relative", marginTop: 10, paddingBottom: 10 }}>
+        <div style={{ position: "absolute", top: 12, left: 20, right: 20, height: 2, background: T.borderMid, zIndex: 0 }} />
+        <div style={{ position: "absolute", top: 12, left: 20, width: "100%", height: 2, background: T.accent, zIndex: 1 }} />
+        {steps.map((step, i) => {
+          const isActive = i <= currentStep;
+          return (
+            <div key={step} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 2, width: 80 }}>
+              <div style={{ width: 24, height: 24, borderRadius: "50%", background: isActive ? T.accent : T.surfaceEl, border: `2px solid ${isActive ? T.accent : T.borderMid}`, display: "flex", alignItems: "center", justifyContent: "center", color: isActive ? "#fff" : T.faint }}>
+                {isActive ? <Icons.check size={14} stroke="#fff" strokeWidth={3}/> : <span style={{ fontSize: 10 }}>{i + 1}</span>}
+              </div>
+              <span style={{ fontSize: 11, color: isActive ? T.text : T.faint, textAlign: "center", lineHeight: 1.2 }}>{step}</span>
+            </div>
+          );
+        })}
+      </div>
+    </WidgetShell>
+  );
+}
+
+function QuickNavCard({ title, icon, desc, onClick }) {
+  return (
+    <div onClick={onClick} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 20, cursor: "pointer", transition: "all 0.2s", display: "flex", flexDirection: "column", gap: 12 }} className="repo-card">
+      <div style={{ color: T.accentBright }}>{icon}</div>
+      <div>
+        <h4 style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4, marginTop: 0 }}>{title}</h4>
+        <p style={{ fontSize: 12, color: T.faint, lineHeight: 1.4, margin: 0 }}>{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+function TechBadge({ name }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", background: T.surfaceEl, border: `1px solid ${T.borderMid}`, borderRadius: T.r4, padding: "4px 10px", fontSize: 12, color: T.text, fontFamily: T.mono }}>
+      {name}
+    </span>
+  );
+}
+
+function RepoOverviewSkeleton() {
+  return (
+    <div style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
+      <div style={{ display: "flex", gap: 16, marginBottom: 32 }}>
+        <div style={{ width: 56, height: 56, borderRadius: T.r8, background: T.surfaceEl }} className="skeleton-pulse" />
+        <div style={{ flex: 1 }}>
+          <div style={{ width: 200, height: 24, background: T.surfaceEl, borderRadius: T.r4, marginBottom: 12 }} className="skeleton-pulse" />
+          <div style={{ width: "60%", height: 14, background: T.surfaceEl, borderRadius: T.r4 }} className="skeleton-pulse" />
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+        {[1,2,3,4].map(i => <div key={i} style={{ height: 100, background: T.surface, borderRadius: T.r8 }} className="skeleton-pulse" />)}
+      </div>
+    </div>
+  );
+}
+
+function RepoOverviewPage({ setActivePage }) {
+  const [status, setStatus] = useState("success"); // "loading" | "error" | "empty" | "success"
+
+  const repo = { 
+    id: "r1", name: "frontend-platform", project: "Core UI", language: "TypeScript", branch: "main", status: "Healthy", 
+    last: "12 min ago", size: "24.5 MB", visibility: "Private", description: "Core frontend platform monorepo containing shared UI components, state management, and the main application shell.",
+    tags: ["frontend", "monorepo", "design-system"]
+  };
+
+  if (status === "loading") return <RepoOverviewSkeleton />;
+  if (status === "error") return <div style={{padding: 40, color: T.error}}>Error loading repository overview.</div>;
+  if (status === "empty") return <div style={{padding: 40, color: T.faint}}>No data available. Repository might be empty.</div>;
+
+  return (
+    <div className="page-in" style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
+      <RepoOverviewHeader repo={repo} />
+
+      {/* Page-level Search & Filters (Placeholders) */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+        <div style={{ flex: 1, position: "relative" }}>
+          <span style={{ position: "absolute", left: 12, top: 10, color: T.faint }}><Icons.search size={16} /></span>
+          <input type="text" placeholder="Search within repository..." style={{ width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "8px 12px 8px 36px", color: T.text, outline: "none" }} />
+        </div>
+        <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "0 12px", borderRadius: T.r6, outline: "none" }}>
+          <option>Analysis Status: All</option>
+        </select>
+        <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "0 12px", borderRadius: T.r6, outline: "none" }}>
+          <option>Language: All</option>
+        </select>
+        <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "0 12px", borderRadius: T.r6, outline: "none" }}>
+          <option>Folder: Root</option>
+        </select>
+        <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "0 12px", borderRadius: T.r6, outline: "none" }}>
+          <option>Date: Any</option>
+        </select>
+      </div>
+
+      {/* Repo Health & Summary Grid */}
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 16, marginTop: 0 }}>Repository Health</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 24 }}>
+        <StatCard label="Health Score" value="94" sub="/ 100" color={T.success} />
+        <StatCard label="Risk Score" value="Low" color={T.success} />
+        <StatCard label="Total Files" value="1,248" />
+        <StatCard label="Total Folders" value="142" />
+        <StatCard label="Repo Size" value="24.5 MB" />
+      </div>
+
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 16, marginTop: 0 }}>Repository Summary</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 24 }}>
+        <StatCard label="Main Language" value="TS" />
+        <StatCard label="Framework" value="React" sub="Placeholder" />
+        <StatCard label="Total Modules" value="12" />
+        <StatCard label="Total Functions" value="4.2k" sub="Placeholder" />
+        <StatCard label="Total Classes" value="156" sub="Placeholder" />
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <AnalysisTimeline />
+      </div>
+
+      {/* Quick Nav Grid */}
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 16, marginTop: 0 }}>Quick Navigation</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 32 }}>
+        <QuickNavCard title="File Explorer" desc="Browse the source tree and view individual files." icon={<Icons.file size={20} />} onClick={() => setActivePage('dashboard')} />
+        <QuickNavCard title="Repository Analysis" desc="Deep dive into codebase metrics and health." icon={<Icons.impact size={20} />} onClick={() => setActivePage('dashboard')} />
+        <QuickNavCard title="Architecture Explorer" desc="View the high-level module graph and system design." icon={<Icons.arch size={20} />} onClick={() => setActivePage('arch')} />
+        <QuickNavCard title="Dependency Explorer" desc="Trace imports, exports, and circular dependencies." icon={<Icons.deps size={20} />} onClick={() => setActivePage('deps')} />
+        <QuickNavCard title="Git Intelligence" desc="View commits, contributors, and branching strategy." icon={<Icons.git size={20} />} onClick={() => setActivePage('git')} />
+        <QuickNavCard title="Settings" desc="Configure rules, environments, and access." icon={<Icons.settings size={20} />} onClick={() => setActivePage('settings')} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+        {/* Left Column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <WidgetShell title="Technologies Used">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <TechBadge name="TypeScript" />
+              <TechBadge name="React" />
+              <TechBadge name="Node.js" />
+              <TechBadge name="Tailwind CSS" />
+              <TechBadge name="Vite" />
+              <TechBadge name="Jest" />
+              <TechBadge name="Docker" />
+            </div>
+          </WidgetShell>
+
+          <WidgetShell title="Repository Insights (Available after analysis)">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 16 }}>
+                <span style={{ fontSize: 12, color: T.faint }}>Largest Module</span>
+                <div style={{ fontSize: 14, color: T.text, fontWeight: 500, marginTop: 4 }}>/packages/ui-components</div>
+              </div>
+              <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 16 }}>
+                <span style={{ fontSize: 12, color: T.faint }}>Most Active Folder</span>
+                <div style={{ fontSize: 14, color: T.text, fontWeight: 500, marginTop: 4 }}>/src/api</div>
+              </div>
+              <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 16 }}>
+                <span style={{ fontSize: 12, color: T.faint }}>Most Imported File</span>
+                <div style={{ fontSize: 14, color: T.text, fontWeight: 500, marginTop: 4 }}>utils.ts</div>
+              </div>
+              <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 16 }}>
+                <span style={{ fontSize: 12, color: T.faint }}>Largest Service</span>
+                <div style={{ fontSize: 14, color: T.text, fontWeight: 500, marginTop: 4 }}>AuthService.ts</div>
+              </div>
+              <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 16 }}>
+                <span style={{ fontSize: 12, color: T.faint }}>Most Complex File</span>
+                <div style={{ fontSize: 14, color: T.text, fontWeight: 500, marginTop: 4 }}>DataGrid.tsx</div>
+              </div>
+            </div>
+          </WidgetShell>
+        </div>
+
+        {/* Right Column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <WidgetShell title="Information Panel">
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Owner</span><span style={{ color: T.text }}>Frontend Team</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Workspace</span><span style={{ color: T.text }}>Northstar Platform</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Project</span><span style={{ color: T.text }}>{repo.project}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Repository ID</span><span style={{ color: T.text, fontFamily: T.mono }}>{repo.id}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Created</span><span style={{ color: T.text }}>Oct 12, 2025</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Last Updated</span><span style={{ color: T.text }}>{repo.last}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Default Branch</span><span style={{ color: T.text }}>{repo.branch}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Visibility</span><span style={{ color: T.text }}>{repo.visibility}</span></div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {repo.tags.map(tag => <span key={tag} style={{background: T.surfaceEl, padding: "2px 6px", borderRadius: T.r4, fontSize: 11, color: T.faint}}>#{tag}</span>)}
+              </div>
+            </div>
+          </WidgetShell>
+
+          <WidgetShell title="Recent Activity">
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {[
+                { title: "Repository Renamed", time: "10 min ago", icon: <Icons.settings size={14} /> },
+                { title: "Analysis Completed", time: "12 min ago", icon: <Icons.check size={14} stroke={T.success} /> },
+                { title: "Analysis Started", time: "15 min ago", icon: <Icons.ai size={14} /> },
+                { title: "Settings Updated", time: "2 hours ago", icon: <Icons.settings size={14} /> },
+                { title: "Repository Uploaded", time: "1 day ago", icon: <Icons.upload size={14} /> },
+              ].map((act, i) => (
+                <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: T.surfaceEl, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {act.icon}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, color: T.text, lineHeight: 1.2 }}>{act.title}</div>
+                    <div style={{ fontSize: 11, color: T.faint, marginTop: 2 }}>{act.time}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </WidgetShell>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function PageStub({ pageId, setActivePage }) {
   if (pageId === "dashboard") return <DashboardPage setActivePage={setActivePage} />;
   if (pageId === "projects") return <ProjectsPage />;
-  if (pageId === "repos")    return <RepositoriesPage />;
+  if (pageId === "repos")    return <RepositoriesPage setActivePage={setActivePage} />;
+  if (pageId === "repo-overview") return <RepoOverviewPage setActivePage={setActivePage} />;
   
   const meta = PAGE_META[pageId] || { label: "Page", breadcrumb: [pageId] };
   return (
