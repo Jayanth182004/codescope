@@ -118,6 +118,10 @@ const Icons = {
 
 /* ─── KEYFRAMES ──────────────────────────────────────────────────────────── */
 const GLOBAL_CSS = `
+.tree-node-hover:hover { background: rgba(255,255,255,0.04) !important; }
+.list-row-hover:hover { background: rgba(255,255,255,0.02) !important; }
+.hover-text:hover { color: #fff !important; }
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: ${T.bg}; color: ${T.text}; font-family: ${T.sans}; height: 100%; }
   ::selection { background: ${T.accentSoft}; }
@@ -883,6 +887,7 @@ const PAGE_META = {
   ai:         { label: "AI Assistant",        breadcrumb: ["Dashboard", "AI Assistant"] },
   settings:   { label: "Settings",            breadcrumb: ["Dashboard", "Settings"] },
   'repo-overview': { label: "Repository Overview", breadcrumb: ["Dashboard", "Repositories", "frontend-platform"] },
+  'repo-explorer': { label: "Repository Explorer", breadcrumb: ["Dashboard", "Repositories", "frontend-platform", "Explorer"] },
 };
 
 const dashboardData = {
@@ -3126,7 +3131,7 @@ function RepoOverviewPage({ setActivePage }) {
       {/* Quick Nav Grid */}
       <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 16, marginTop: 0 }}>Quick Navigation</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 32 }}>
-        <QuickNavCard title="File Explorer" desc="Browse the source tree and view individual files." icon={<Icons.file size={20} />} onClick={() => setActivePage('dashboard')} />
+        <QuickNavCard title="File Explorer" desc="Browse the source tree and view individual files." icon={<Icons.file size={20} />} onClick={() => setActivePage('repo-explorer')} />
         <QuickNavCard title="Repository Analysis" desc="Deep dive into codebase metrics and health." icon={<Icons.impact size={20} />} onClick={() => setActivePage('dashboard')} />
         <QuickNavCard title="Architecture Explorer" desc="View the high-level module graph and system design." icon={<Icons.arch size={20} />} onClick={() => setActivePage('arch')} />
         <QuickNavCard title="Dependency Explorer" desc="Trace imports, exports, and circular dependencies." icon={<Icons.deps size={20} />} onClick={() => setActivePage('deps')} />
@@ -3221,11 +3226,388 @@ function RepoOverviewPage({ setActivePage }) {
 }
 
 
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REPOSITORY EXPLORER PAGE
+═══════════════════════════════════════════════════════════════════════════ */
+
+const MOCK_FILE_TREE = [
+  { id: "root", name: "frontend-platform", type: "folder", fileCount: 1248, children: [
+    { id: "f1", name: "src", type: "folder", fileCount: 245, children: [
+      { id: "f11", name: "api", type: "folder", fileCount: 12, children: [
+        { id: "f111", name: "auth.ts", type: "file", lang: "TypeScript", size: "2.4 KB", date: "2 days ago", created: "Oct 12, 2025", status: "Analyzed" },
+        { id: "f112", name: "users.ts", type: "file", lang: "TypeScript", size: "4.1 KB", date: "5 hours ago", created: "Oct 15, 2025", status: "Pending" }
+      ]},
+      { id: "f12", name: "components", type: "folder", fileCount: 84, children: [
+        { id: "f121", name: "Button.tsx", type: "file", lang: "React", size: "1.2 KB", date: "1 week ago", created: "Nov 1, 2025", status: "Analyzed" },
+        { id: "f122", name: "DataGrid.tsx", type: "file", lang: "React", size: "8.5 KB", date: "3 days ago", created: "Nov 5, 2025", status: "Analyzed" }
+      ]},
+      { id: "f13", name: "utils.ts", type: "file", lang: "TypeScript", size: "1.8 KB", date: "1 month ago", created: "Oct 12, 2025", status: "Analyzed" },
+      { id: "f14", name: "index.tsx", type: "file", lang: "React", size: "500 B", date: "2 weeks ago", created: "Oct 12, 2025", status: "Analyzed" }
+    ]},
+    { id: "f2", name: "public", type: "folder", fileCount: 8, children: [
+      { id: "f21", name: "favicon.ico", type: "file", lang: "Image", size: "15 KB", date: "1 year ago", created: "Jan 1, 2025", status: "Skipped" },
+      { id: "f22", name: "index.html", type: "file", lang: "HTML", size: "1.1 KB", date: "2 months ago", created: "Jan 1, 2025", status: "Analyzed" }
+    ]},
+    { id: "empty", name: "empty-dir", type: "folder", fileCount: 0, children: [] },
+    { id: "f3", name: "package.json", type: "file", lang: "JSON", size: "1.5 KB", date: "1 week ago", created: "Oct 12, 2025", status: "Analyzed" },
+    { id: "f4", name: "README.md", type: "file", lang: "Markdown", size: "3.2 KB", date: "3 days ago", created: "Oct 12, 2025", status: "Skipped" }
+  ]}
+];
+
+function RepoBreadcrumb({ path, onNavigate }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: T.faint, marginBottom: 16 }}>
+      {path.map((segment, i) => (
+        <span key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span onClick={() => onNavigate(segment.id)} style={{ color: i === path.length - 1 ? T.text : T.faint, cursor: "pointer", transition: "color 0.2s" }} className="hover-text">{segment.name}</span>
+          {i < path.length - 1 && <span>›</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function FolderNode({ node, level, expanded, toggleExpand, onSelect, selectedPath }) {
+  const isExpanded = expanded.has(node.id);
+  const isSelected = selectedPath === node.id;
+  const isFolder = node.type === "folder";
+
+  return (
+    <div>
+      <div 
+        onClick={() => {
+          if (isFolder) toggleExpand(node.id);
+          onSelect(node);
+        }}
+        style={{ 
+          display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 12px", paddingLeft: 12 + level * 16, 
+          cursor: "pointer", borderRadius: T.r4, 
+          background: isSelected ? T.accentSoft : "transparent",
+          color: isSelected ? T.accentBright : T.text,
+          transition: "background 0.2s"
+        }}
+        className="tree-node-hover"
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <div style={{ width: 14, display: "flex", justifyContent: "center", flexShrink: 0 }}>
+            {isFolder && <span style={{ fontSize: 10, transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.1s" }}>▶</span>}
+          </div>
+          {isFolder ? <span style={{ color: T.warning, flexShrink: 0 }}>📁</span> : <span style={{ color: T.info, flexShrink: 0 }}>📄</span>}
+          <span style={{ fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{node.name}</span>
+        </div>
+        {isFolder && <span style={{ fontSize: 11, color: T.faint }}>{node.fileCount}</span>}
+      </div>
+      {isFolder && isExpanded && node.children && (
+        <div>
+          {node.children.map(child => (
+            <FolderNode key={child.id} node={child} level={level + 1} expanded={expanded} toggleExpand={toggleExpand} onSelect={onSelect} selectedPath={selectedPath} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FolderTree({ data, onSelectFile, onSelectFolder }) {
+  const [expanded, setExpanded] = useState(new Set(["root", "f1"]));
+  const [selectedPath, setSelectedPath] = useState(null);
+
+  const toggleExpand = (id) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelect = (node) => {
+    setSelectedPath(node.id);
+    if (node.type === "file") onSelectFile(node);
+    else onSelectFolder(node);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      {data.map(node => (
+        <FolderNode key={node.id} node={node} level={0} expanded={expanded} toggleExpand={toggleExpand} onSelect={handleSelect} selectedPath={selectedPath} />
+      ))}
+    </div>
+  );
+}
+
+function ExplorerFileRow({ file, onClick, isSelected }) {
+  return (
+    <div 
+      onClick={() => onClick(file)}
+      style={{ 
+        display: "grid", gridTemplateColumns: "minmax(0, 3fr) 1fr 1fr 1fr 1fr 1fr", gap: 16, 
+        padding: "10px 16px", cursor: "pointer", 
+        borderBottom: `1px solid ${T.border}`,
+        background: isSelected ? T.surfaceHov : "transparent"
+      }}
+      className="list-row-hover"
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        {file.type === "folder" ? <span style={{ color: T.warning }}>📁</span> : <span style={{ color: T.info }}>📄</span>}
+        <span style={{ fontSize: 13, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{file.name}</span>
+      </div>
+      <div style={{ fontSize: 13, color: T.dim, display: "flex", alignItems: "center" }}>{file.type === "file" ? `.${file.name.split('.').pop()}` : "--"}</div>
+      <div style={{ display: "flex", alignItems: "center" }}>
+        {file.lang && <span style={{ fontSize: 11, color: T.text, background: T.surfaceEl, border: `1px solid ${T.borderMid}`, padding: "2px 8px", borderRadius: T.r4 }}>{file.lang}</span>}
+      </div>
+      <div style={{ fontSize: 13, color: T.dim, display: "flex", alignItems: "center" }}>{file.size || "--"}</div>
+      <div style={{ fontSize: 13, color: T.faint, display: "flex", alignItems: "center" }}>{file.date || "--"}</div>
+      <div style={{ fontSize: 13, color: file.status === "Analyzed" ? T.success : T.faint, display: "flex", alignItems: "center" }}>{file.status || "--"}</div>
+    </div>
+  );
+}
+
+function FilePreview({ file }) {
+  if (!file || file.type === "folder") return (
+    <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed ${T.border}`, borderRadius: T.r6, background: T.surfaceEl, color: T.faint, fontSize: 13 }}>
+      Select a file to preview
+    </div>
+  );
+
+  return (
+    <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r6, overflow: "hidden" }}>
+      <div style={{ background: T.surfaceEl, padding: "8px 12px", borderBottom: `1px solid ${T.border}`, fontSize: 12, color: T.dim, fontFamily: T.mono, display: "flex", justifyContent: "space-between" }}>
+        <span>{file.name}</span>
+        <span>{file.size}</span>
+      </div>
+      <div style={{ background: "#0a0a0b", padding: 16, fontSize: 13, fontFamily: T.mono, color: "#a9b1d6", overflowX: "auto" }}>
+        <pre style={{ margin: 0 }}>
+          <span style={{ color: "#bb9af7" }}>import</span> {"{"} useState {"}"} <span style={{ color: "#bb9af7" }}>from</span> <span style={{ color: "#9ece6a" }}>'react'</span>;<br/><br/>
+          <span style={{ color: "#bb9af7" }}>export function</span> <span style={{ color: "#7aa2f7" }}>{file.name.split('.')[0]}</span>() {"{"}<br/>
+          {"  "}<span style={{ color: "#bb9af7" }}>return</span> (<br/>
+          {"    "}&lt;<span style={{ color: "#f7768e" }}>div</span>&gt;Preview for {file.name}&lt;/<span style={{ color: "#f7768e" }}>div</span>&gt;<br/>
+          {"  "});<br/>
+          {"}"}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function ExplorerSkeleton() {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 320px", height: "calc(100vh - 60px)", borderTop: `1px solid ${T.border}` }}>
+      <div style={{ background: T.surface, borderRight: `1px solid ${T.border}`, padding: 16 }}>
+        <div style={{ height: 32, background: T.surfaceEl, borderRadius: T.r4, marginBottom: 24 }} className="skeleton-pulse" />
+        {[1,2,3,4,5,6].map(i => <div key={i} style={{ height: 20, background: T.surfaceEl, borderRadius: T.r4, marginBottom: 12, width: `${100 - i*10}%` }} className="skeleton-pulse" />)}
+      </div>
+      <div style={{ background: T.bg, padding: 24 }}>
+        <div style={{ height: 16, width: 200, background: T.surfaceEl, borderRadius: T.r4, marginBottom: 24 }} className="skeleton-pulse" />
+        <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+          {[1,2,3].map(i => <div key={i} style={{ height: 32, width: 100, background: T.surfaceEl, borderRadius: T.r6 }} className="skeleton-pulse" />)}
+        </div>
+        {[1,2,3,4,5].map(i => <div key={i} style={{ height: 48, background: T.surface, borderBottom: `1px solid ${T.border}`, marginBottom: 8 }} className="skeleton-pulse" />)}
+      </div>
+      <div style={{ background: T.surface, borderLeft: `1px solid ${T.border}`, padding: 24 }}>
+        <div style={{ height: 24, width: 150, background: T.surfaceEl, borderRadius: T.r4, marginBottom: 32 }} className="skeleton-pulse" />
+        <div style={{ height: 120, background: T.surfaceEl, borderRadius: T.r4, marginBottom: 24 }} className="skeleton-pulse" />
+        <div style={{ height: 200, background: T.surfaceEl, borderRadius: T.r4 }} className="skeleton-pulse" />
+      </div>
+    </div>
+  );
+}
+
+function RepoExplorerPage({ setActivePage }) {
+  const [status, setStatus] = useState("success");
+  
+  // Flatten tree to find path for breadcrumbs easily (hack for mock)
+  const findNode = (nodes, id, path = []) => {
+    for (const node of nodes) {
+      if (node.id === id) return [...path, node];
+      if (node.children) {
+        const found = findNode(node.children, id, [...path, node]);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const [currentFolderId, setCurrentFolderId] = useState("root");
+  const [selectedFile, setSelectedFile] = useState(null);
+
+  const folderPath = findNode(MOCK_FILE_TREE, currentFolderId) || [MOCK_FILE_TREE[0]];
+  const currentFolder = folderPath[folderPath.length - 1];
+
+  let listData = currentFolder.children || [];
+
+  if (status === "loading") return <ExplorerSkeleton />;
+  if (status === "error") return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "calc(100vh - 60px)" }}>
+      <Icons.error size={48} stroke={T.error} />
+      <h2 style={{ color: T.text, marginTop: 16 }}>Unable to load repository</h2>
+      <p style={{ color: T.dim, marginTop: 8 }}>The repository explorer service is currently unreachable.</p>
+      <DashButton variant="primary" style={{ marginTop: 24 }} onClick={() => setStatus("success")}>Retry</DashButton>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 320px", height: "calc(100vh - 60px)", borderTop: `1px solid ${T.border}` }}>
+      
+      {/* LEFT PANEL: Folder Tree & Stats */}
+      <div style={{ background: T.surface, borderRight: `1px solid ${T.border}`, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></span>
+            <input type="text" placeholder="Search repository..." style={{ width: "100%", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "6px 12px 6px 30px", color: T.text, fontSize: 13, outline: "none" }} />
+          </div>
+        </div>
+        <div style={{ padding: "12px 0", flex: 1 }}>
+          <FolderTree 
+            data={MOCK_FILE_TREE} 
+            onSelectFolder={(folder) => { setCurrentFolderId(folder.id); setSelectedFile(null); }}
+            onSelectFile={(file) => { setSelectedFile(file); }}
+          />
+        </div>
+        <div style={{ borderTop: `1px solid ${T.border}`, padding: 16, fontSize: 12, color: T.dim }}>
+          <div style={{ fontWeight: 600, color: T.text, marginBottom: 8 }}>Repository Statistics</div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Total Files</span><span>1,248</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Total Folders</span><span>142</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Size</span><span>24.5 MB</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Largest Folder</span><span>/packages/ui</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Languages</span><span>TypeScript, React</span></div>
+        </div>
+      </div>
+
+      {/* CENTER PANEL: File List */}
+      <div style={{ background: T.bg, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <div style={{ padding: "16px 24px", borderBottom: `1px solid ${T.border}`, display: "flex", flexDirection: "column", gap: 16 }}>
+          <RepoBreadcrumb 
+            path={[{name: "Northstar Platform", id: "root"}, {name: "frontend-platform", id: "root"}, ...folderPath]} 
+            onNavigate={(id) => setCurrentFolderId(id)}
+          />
+          
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
+              <option>Language: All</option>
+              <option>TypeScript</option>
+              <option>React</option>
+            </select>
+            <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
+              <option>Extension: All</option>
+              <option>.ts</option>
+              <option>.tsx</option>
+            </select>
+            <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
+              <option>Folder: Current</option>
+              <option>All Subfolders</option>
+            </select>
+            <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
+              <option>Modified: Any Date</option>
+            </select>
+            <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
+              <option>Size: Any</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {listData.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: T.faint }}>
+              <Icons.file size={48} strokeWidth={1} />
+              <p style={{ marginTop: 16 }}>No files found in this directory</p>
+              <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+                <DashButton variant="secondary"><span style={{fontSize:16}}>↻</span> Refresh</DashButton>
+                <DashButton variant="primary">Upload Files</DashButton>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) 1fr 1fr 1fr 1fr 1fr", gap: 16, padding: "12px 16px", borderBottom: `1px solid ${T.borderMid}`, fontSize: 12, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <div style={{cursor:"pointer"}}>Name ↕</div>
+                <div style={{cursor:"pointer"}}>Ext ↕</div>
+                <div style={{cursor:"pointer"}}>Language ↕</div>
+                <div style={{cursor:"pointer"}}>Size ↕</div>
+                <div style={{cursor:"pointer"}}>Modified ↕</div>
+                <div style={{cursor:"pointer"}}>Status ↕</div>
+              </div>
+              {listData.map(item => (
+                <ExplorerFileRow 
+                  key={item.id} 
+                  file={item} 
+                  isSelected={selectedFile?.id === item.id}
+                  onClick={(file) => {
+                    if (file.type === "folder") {
+                      setCurrentFolderId(file.id);
+                      setSelectedFile(null);
+                    } else {
+                      setSelectedFile(file);
+                    }
+                  }} 
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* RIGHT PANEL: Details & Preview */}
+      <div style={{ background: T.surface, borderLeft: `1px solid ${T.border}`, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+        {selectedFile ? (
+          <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 24 }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <span style={{ color: T.info, fontSize: 24 }}>📄</span>
+                <h2 style={{ fontSize: 18, fontWeight: 600, color: T.text, margin: 0, wordBreak: "break-all" }}>{selectedFile.name}</h2>
+              </div>
+              <div style={{ fontSize: 12, color: T.faint, fontFamily: T.mono }}>{folderPath.map(f=>f.name).join(' / ')} / {selectedFile.name}</div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <DashButton variant="primary">Open File</DashButton>
+              <DashButton variant="secondary"><Icons.link /> Copy Path</DashButton>
+              <DashButton variant="secondary">Download</DashButton>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13, borderTop: `1px solid ${T.border}`, paddingTop: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Repository</span><span style={{ color: T.text }}>frontend-platform</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Language</span><span style={{ color: T.text }}>{selectedFile.lang}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Extension</span><span style={{ color: T.text }}>.{selectedFile.name.split('.').pop()}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Size</span><span style={{ color: T.text }}>{selectedFile.size}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Created Date</span><span style={{ color: T.text }}>{selectedFile.created}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Modified Date</span><span style={{ color: T.text }}>{selectedFile.date}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Analysis Status</span><span style={{ color: selectedFile.status === "Analyzed" ? T.success : T.warning }}>{selectedFile.status}</span></div>
+            </div>
+
+            <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 20 }}>
+              <h4 style={{ fontSize: 12, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>File Preview</h4>
+              <FilePreview file={selectedFile} />
+            </div>
+            
+            <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 20 }}>
+              <h4 style={{ fontSize: 12, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>Quick Actions</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }}>Analyze This File</DashButton>
+                <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }}>View Dependencies</DashButton>
+                <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }}>View Architecture</DashButton>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ padding: 24, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: T.faint, textAlign: "center" }}>
+            <Icons.file size={48} strokeWidth={1} />
+            <p style={{ marginTop: 16, fontSize: 14 }}>Select a file to view details and preview.</p>
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}
+
+
 function PageStub({ pageId, setActivePage }) {
   if (pageId === "dashboard") return <DashboardPage setActivePage={setActivePage} />;
   if (pageId === "projects") return <ProjectsPage />;
   if (pageId === "repos")    return <RepositoriesPage setActivePage={setActivePage} />;
   if (pageId === "repo-overview") return <RepoOverviewPage setActivePage={setActivePage} />;
+  if (pageId === "repo-explorer") return <RepoExplorerPage setActivePage={setActivePage} />;
   
   const meta = PAGE_META[pageId] || { label: "Page", breadcrumb: [pageId] };
   return (
