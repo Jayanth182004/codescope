@@ -888,6 +888,7 @@ const PAGE_META = {
   settings:   { label: "Settings",            breadcrumb: ["Dashboard", "Settings"] },
   'repo-overview': { label: "Repository Overview", breadcrumb: ["Dashboard", "Repositories", "frontend-platform"] },
   'repo-explorer': { label: "Repository Explorer", breadcrumb: ["Dashboard", "Repositories", "frontend-platform", "Explorer"] },
+  'repo-analysis': { label: "Repository Analysis", breadcrumb: ["Dashboard", "Repositories", "frontend-platform", "Analysis"] },
 };
 
 const dashboardData = {
@@ -2962,7 +2963,7 @@ function RepositoriesPage({ setActivePage }) {
    REPOSITORY OVERVIEW PAGE
 ═══════════════════════════════════════════════════════════════════════════ */
 
-function RepoOverviewHeader({ repo }) {
+function RepoOverviewHeader({ repo, setActivePage }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32 }}>
       <div style={{ display: "flex", gap: 16 }}>
@@ -2989,7 +2990,7 @@ function RepoOverviewHeader({ repo }) {
         <DashButton variant="secondary" title="Open Settings"><Icons.settings /></DashButton>
         <DashButton variant="secondary" title="Archive"><Icons.archive /></DashButton>
         <DashButton variant="secondary" title="Open Explorer"><Icons.file /></DashButton>
-        <DashButton variant="primary">Analyze Repository</DashButton>
+        <DashButton variant="primary" onClick={() => setActivePage('repo-analysis')}>Analyze Repository</DashButton>
       </div>
     </div>
   );
@@ -3051,6 +3052,7 @@ function TechBadge({ name }) {
   );
 }
 
+
 function RepoOverviewSkeleton() {
   return (
     <div style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
@@ -3078,12 +3080,36 @@ function RepoOverviewPage({ setActivePage }) {
   };
 
   if (status === "loading") return <RepoOverviewSkeleton />;
-  if (status === "error") return <div style={{padding: 40, color: T.error}}>Error loading repository overview.</div>;
-  if (status === "empty") return <div style={{padding: 40, color: T.faint}}>No data available. Repository might be empty.</div>;
+  if (status === "error") return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "calc(100vh - 120px)", color: T.faint }}>
+      <Icons.error size={48} stroke={T.error} />
+      <h2 style={{ color: T.text, marginTop: 16 }}>Unable to load repository overview</h2>
+      <p style={{ color: T.dim, marginTop: 8 }}>The overview metrics could not be loaded at this time.</p>
+      <DashButton variant="primary" style={{ marginTop: 16 }} onClick={() => setStatus("success")}>Retry</DashButton>
+    </div>
+  );
+  if (status === "empty") return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "calc(100vh - 120px)", color: T.faint }}>
+      <Icons.file size={48} />
+      <h2 style={{ color: T.text, marginTop: 16 }}>Repository is Empty</h2>
+      <p style={{ color: T.dim, marginTop: 8 }}>This repository does not contain any branches or code files yet.</p>
+      <DashButton variant="primary" style={{ marginTop: 16 }} onClick={() => setStatus("success")}>Reload</DashButton>
+    </div>
+  );
 
   return (
     <div className="page-in" style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
-      <RepoOverviewHeader repo={repo} />
+      
+      {/* Dev Switch State controls */}
+      <div style={{ display: "flex", gap: 10, background: T.surface, border: `1px solid ${T.border}`, padding: 8, borderRadius: T.r6, marginBottom: 24, justifyContent: "flex-end" }}>
+        <span style={{ fontSize: 12, color: T.faint, alignSelf: "center", marginRight: 10 }}>Dev controls:</span>
+        <button onClick={() => setStatus("loading")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Loading</button>
+        <button onClick={() => setStatus("error")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Error</button>
+        <button onClick={() => setStatus("empty")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Empty</button>
+        <button onClick={() => setStatus("success")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Success</button>
+      </div>
+
+      <RepoOverviewHeader repo={repo} setActivePage={setActivePage} />
 
       {/* Page-level Search & Filters (Placeholders) */}
       <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
@@ -3109,10 +3135,14 @@ function RepoOverviewPage({ setActivePage }) {
       <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 16, marginTop: 0 }}>Repository Health</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 24 }}>
         <StatCard label="Health Score" value="94" sub="/ 100" color={T.success} />
-        <StatCard label="Risk Score" value="Low" color={T.success} />
+        <StatCard label="Analysis Status" value="Healthy" color={T.success} />
         <StatCard label="Total Files" value="1,248" />
         <StatCard label="Total Folders" value="142" />
-        <StatCard label="Repo Size" value="24.5 MB" />
+        <StatCard label="Programming Languages" value="TS, React" />
+        <StatCard label="Last Analysis" value="2 hours ago" />
+        <StatCard label="Repository Size" value="24.5 MB" />
+        <StatCard label="Total Commits" value="482" sub="placeholder" />
+        <StatCard label="Risk Score" value="Low" sub="placeholder" color={T.success} />
       </div>
 
       <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 16, marginTop: 0 }}>Repository Summary</h3>
@@ -3132,7 +3162,7 @@ function RepoOverviewPage({ setActivePage }) {
       <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 16, marginTop: 0 }}>Quick Navigation</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 32 }}>
         <QuickNavCard title="File Explorer" desc="Browse the source tree and view individual files." icon={<Icons.file size={20} />} onClick={() => setActivePage('repo-explorer')} />
-        <QuickNavCard title="Repository Analysis" desc="Deep dive into codebase metrics and health." icon={<Icons.impact size={20} />} onClick={() => setActivePage('dashboard')} />
+        <QuickNavCard title="Repository Analysis" desc="Deep dive into codebase metrics and health." icon={<Icons.impact size={20} />} onClick={() => setActivePage('repo-analysis')} />
         <QuickNavCard title="Architecture Explorer" desc="View the high-level module graph and system design." icon={<Icons.arch size={20} />} onClick={() => setActivePage('arch')} />
         <QuickNavCard title="Dependency Explorer" desc="Trace imports, exports, and circular dependencies." icon={<Icons.deps size={20} />} onClick={() => setActivePage('deps')} />
         <QuickNavCard title="Git Intelligence" desc="View commits, contributors, and branching strategy." icon={<Icons.git size={20} />} onClick={() => setActivePage('git')} />
@@ -3224,6 +3254,7 @@ function RepoOverviewPage({ setActivePage }) {
     </div>
   );
 }
+
 
 
 
@@ -3414,9 +3445,15 @@ function ExplorerSkeleton() {
   );
 }
 
+
 function RepoExplorerPage({ setActivePage }) {
   const [status, setStatus] = useState("success");
-  
+  const [searchTerm, setSearchTerm] = useState("");
+  const [langFilter, setLangFilter] = useState("All");
+  const [extFilter, setExtFilter] = useState("All");
+  const [sortField, setSortField] = useState("name");
+  const [sortAsc, setSortAsc] = useState(true);
+
   // Flatten tree to find path for breadcrumbs easily (hack for mock)
   const findNode = (nodes, id, path = []) => {
     for (const node of nodes) {
@@ -3435,7 +3472,39 @@ function RepoExplorerPage({ setActivePage }) {
   const folderPath = findNode(MOCK_FILE_TREE, currentFolderId) || [MOCK_FILE_TREE[0]];
   const currentFolder = folderPath[folderPath.length - 1];
 
+  // In-memory searching, filtering, and sorting
   let listData = currentFolder.children || [];
+
+  if (searchTerm) {
+    listData = listData.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  }
+
+  if (langFilter !== "All") {
+    listData = listData.filter(item => item.lang === langFilter);
+  }
+
+  if (extFilter !== "All") {
+    listData = listData.filter(item => item.type === "file" && item.name.endsWith(extFilter));
+  }
+
+  listData = [...listData].sort((a, b) => {
+    let fieldA = a[sortField] || "";
+    let fieldB = b[sortField] || "";
+    
+    if (typeof fieldA === "string") {
+      return sortAsc ? fieldA.localeCompare(fieldB) : fieldB.localeCompare(fieldA);
+    }
+    return sortAsc ? fieldA - fieldB : fieldB - fieldA;
+  });
+
+  const handleHeaderClick = (field) => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  };
 
   if (status === "loading") return <ExplorerSkeleton />;
   if (status === "error") return (
@@ -3455,7 +3524,13 @@ function RepoExplorerPage({ setActivePage }) {
         <div style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
           <div style={{ position: "relative" }}>
             <span style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></span>
-            <input type="text" placeholder="Search repository..." style={{ width: "100%", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "6px 12px 6px 30px", color: T.text, fontSize: 13, outline: "none" }} />
+            <input 
+              type="text" 
+              placeholder="Search repository..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ width: "100%", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "6px 12px 6px 30px", color: T.text, fontSize: 13, outline: "none" }} 
+            />
           </div>
         </div>
         <div style={{ padding: "12px 0", flex: 1 }}>
@@ -3471,6 +3546,7 @@ function RepoExplorerPage({ setActivePage }) {
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Total Folders</span><span>142</span></div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Size</span><span>24.5 MB</span></div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Largest Folder</span><span>/packages/ui</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Largest File</span><span>DataGrid.tsx (8.5 KB)</span></div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Languages</span><span>TypeScript, React</span></div>
         </div>
       </div>
@@ -3484,15 +3560,24 @@ function RepoExplorerPage({ setActivePage }) {
           />
           
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
-              <option>Language: All</option>
-              <option>TypeScript</option>
-              <option>React</option>
+            <select 
+              value={langFilter}
+              onChange={(e) => setLangFilter(e.target.value)}
+              style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}
+            >
+              <option value="All">Language: All</option>
+              <option value="TypeScript">TypeScript</option>
+              <option value="React">React</option>
             </select>
-            <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
-              <option>Extension: All</option>
-              <option>.ts</option>
-              <option>.tsx</option>
+            <select 
+              value={extFilter}
+              onChange={(e) => setExtFilter(e.target.value)}
+              style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}
+            >
+              <option value="All">Extension: All</option>
+              <option value=".ts">.ts</option>
+              <option value=".tsx">.tsx</option>
+              <option value=".html">.html</option>
             </select>
             <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
               <option>Folder: Current</option>
@@ -3513,19 +3598,19 @@ function RepoExplorerPage({ setActivePage }) {
               <Icons.file size={48} strokeWidth={1} />
               <p style={{ marginTop: 16 }}>No files found in this directory</p>
               <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-                <DashButton variant="secondary"><span style={{fontSize:16}}>↻</span> Refresh</DashButton>
+                <DashButton variant="secondary" onClick={() => { setSearchTerm(""); setLangFilter("All"); setExtFilter("All"); }}><span style={{fontSize:16}}>↻</span> Reset Filters</DashButton>
                 <DashButton variant="primary">Upload Files</DashButton>
               </div>
             </div>
           ) : (
             <div>
               <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) 1fr 1fr 1fr 1fr 1fr", gap: 16, padding: "12px 16px", borderBottom: `1px solid ${T.borderMid}`, fontSize: 12, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                <div style={{cursor:"pointer"}}>Name ↕</div>
-                <div style={{cursor:"pointer"}}>Ext ↕</div>
-                <div style={{cursor:"pointer"}}>Language ↕</div>
-                <div style={{cursor:"pointer"}}>Size ↕</div>
-                <div style={{cursor:"pointer"}}>Modified ↕</div>
-                <div style={{cursor:"pointer"}}>Status ↕</div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("name")}>Name {sortField === "name" ? (sortAsc ? "▲" : "▼") : "↕"}</div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("name")}>Ext ↕</div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("lang")}>Language {sortField === "lang" ? (sortAsc ? "▲" : "▼") : "↕"}</div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("size")}>Size {sortField === "size" ? (sortAsc ? "▲" : "▼") : "↕"}</div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("date")}>Modified ↕</div>
+                <div style={{cursor:"pointer"}} onClick={() => handleHeaderClick("status")}>Status ↕</div>
               </div>
               {listData.map(item => (
                 <ExplorerFileRow 
@@ -3583,9 +3668,9 @@ function RepoExplorerPage({ setActivePage }) {
             <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 20 }}>
               <h4 style={{ fontSize: 12, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>Quick Actions</h4>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }}>Analyze This File</DashButton>
-                <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }}>View Dependencies</DashButton>
-                <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }}>View Architecture</DashButton>
+                <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }} onClick={() => setActivePage('repo-analysis')}>Analyze This File</DashButton>
+                <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }} onClick={() => setActivePage('deps')}>View Dependencies</DashButton>
+                <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }} onClick={() => setActivePage('arch')}>View Architecture</DashButton>
               </div>
             </div>
           </div>
@@ -3602,12 +3687,569 @@ function RepoExplorerPage({ setActivePage }) {
 }
 
 
+
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REPOSITORY ANALYSIS PAGE
+═══════════════════════════════════════════════════════════════════════════ */
+
+function LanguageChart({ languages }) {
+  return (
+    <WidgetShell title="Language Distribution">
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", height: 10, borderRadius: T.r4, overflow: "hidden" }}>
+          {languages.map((lang) => (
+            <div 
+              key={lang.name} 
+              style={{ 
+                width: `${lang.percent}%`, 
+                background: LANG_COLORS[lang.name] || T.faint,
+                height: "100%" 
+              }} 
+            />
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {languages.map((lang) => (
+            <div key={lang.name} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: LANG_COLORS[lang.name] || T.faint }} />
+              <span style={{ color: T.text, fontWeight: 500 }}>{lang.name}</span>
+              <span style={{ color: T.faint }}>{lang.percent}% ({lang.files} files, {lang.loc} LOC)</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </WidgetShell>
+  );
+}
+
+function FolderMetricsWidget() {
+  return (
+    <WidgetShell title="Folder Metrics">
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13 }}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Largest Folder</span><span style={{ color: T.text, fontFamily: T.mono }}>/packages/ui-components (14.2 MB)</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Most Files</span><span style={{ color: T.text, fontFamily: T.mono }}>/src/components (84 files)</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Deepest Folder</span><span style={{ color: T.text, fontFamily: T.mono }}>/src/api/v2/auth/providers/oauth (6 levels)</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Folder Size</span><span style={{ color: T.text }}>24.5 MB</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>File Distribution</span><span style={{ color: T.text }}>80% Code, 15% Configuration, 5% Assets</span></div>
+      </div>
+    </WidgetShell>
+  );
+}
+
+function ModuleTableWidget({ modules }) {
+  return (
+    <WidgetShell title="Module Analysis">
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${T.borderMid}`, color: T.faint, textAlign: "left" }}>
+              <th style={{ padding: "8px 4px" }}>Module Name</th>
+              <th style={{ padding: "8px 4px" }}>Files</th>
+              <th style={{ padding: "8px 4px" }}>Functions</th>
+              <th style={{ padding: "8px 4px" }}>Classes</th>
+              <th style={{ padding: "8px 4px" }}>Exports</th>
+              <th style={{ padding: "8px 4px" }}>Imports</th>
+            </tr>
+          </thead>
+          <tbody>
+            {modules.map((m) => (
+              <tr key={m.name} style={{ borderBottom: `1px solid ${T.border}` }}>
+                <td style={{ padding: "8px 4px", color: T.text, fontFamily: T.mono }}>{m.name}</td>
+                <td style={{ padding: "8px 4px", color: T.dim }}>{m.files}</td>
+                <td style={{ padding: "8px 4px", color: T.dim }}>{m.functions}</td>
+                <td style={{ padding: "8px 4px", color: T.dim }}>{m.classes}</td>
+                <td style={{ padding: "8px 4px", color: T.dim }}>{m.exports}</td>
+                <td style={{ padding: "8px 4px", color: T.dim }}>{m.imports}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </WidgetShell>
+  );
+}
+
+function ImportTableWidget({ imports }) {
+  return (
+    <WidgetShell title="Import Analysis">
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.faint, marginBottom: 8, textTransform: "uppercase" }}>Most Imported Files</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {imports.mostImported.map(item => (
+              <div key={item.file} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                <span style={{ color: T.text, fontFamily: T.mono }}>{item.file}</span>
+                <span style={{ color: T.accentBright }}>{item.count} imports</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderBottom: `1px solid ${T.border}`, paddingBottom: 8 }}>
+          <span style={{ color: T.faint }}>Total Imports Count</span>
+          <span style={{ color: T.text, fontWeight: 600 }}>{imports.totalImportCount}</span>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.faint, marginBottom: 8, textTransform: "uppercase" }}>Internal Modules</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+            {imports.internal.map(mod => (
+              <span key={mod} style={{ background: T.surfaceEl, border: `1px solid ${T.borderMid}`, borderRadius: T.r4, padding: "2px 8px", fontSize: 11, color: T.dim, fontFamily: T.mono }}>
+                {mod}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.faint, marginBottom: 8, textTransform: "uppercase" }}>External Libraries</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {imports.external.map(lib => (
+              <span key={lib} style={{ background: T.surfaceEl, border: `1px solid ${T.borderMid}`, borderRadius: T.r4, padding: "2px 8px", fontSize: 11, color: T.text, fontFamily: T.mono }}>
+                {lib}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </WidgetShell>
+  );
+}
+
+function AnalysisHeader({ repo, onReanalyze, onDownload, status }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32 }}>
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 600, color: T.text, letterSpacing: "-0.02em", margin: 0 }}>{repo.name}</h1>
+          <span style={{ fontSize: 11, background: status === "completed" ? T.success : status === "running" ? T.info : T.warning, color: "#fff", padding: "2px 8px", borderRadius: T.r4 }}>
+            {status.toUpperCase()}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 16, fontSize: 12, color: T.faint, marginTop: 6 }}>
+          <span>Version: {repo.version}</span>
+          <span>Duration: {repo.duration}</span>
+          <span>Completed: {repo.completedAt}</span>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 12 }}>
+        <DashButton variant="secondary" onClick={onDownload}>Download Report</DashButton>
+        <DashButton variant="primary" onClick={onReanalyze}>Analyze Again</DashButton>
+      </div>
+    </div>
+  );
+}
+
+function ScanProgressTimeline({ currentStep, steps, status }) {
+  const stepStatusColors = {
+    completed: T.success,
+    running: T.info,
+    failed: T.error,
+    paused: T.warning
+  };
+
+  return (
+    <WidgetShell title="Analysis Scan Progress">
+      <div style={{ display: "flex", justifyContent: "space-between", position: "relative", marginTop: 10, paddingBottom: 10 }}>
+        <div style={{ position: "absolute", top: 12, left: 20, right: 20, height: 2, background: T.borderMid, zIndex: 0 }} />
+        <div 
+          style={{ 
+            position: "absolute", 
+            top: 12, 
+            left: 20, 
+            width: `${(currentStep / (steps.length - 1)) * 90}%`, 
+            height: 2, 
+            background: stepStatusColors[status] || T.accent, 
+            zIndex: 1,
+            transition: "width 0.3s ease"
+          }} 
+        />
+        {steps.map((step, i) => {
+          const isDone = i < currentStep;
+          const isCurrent = i === currentStep;
+          const isActive = isDone || isCurrent;
+          const color = isCurrent ? (stepStatusColors[status] || T.accent) : isDone ? T.success : T.borderMid;
+          
+          return (
+            <div key={step} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 2, width: 75 }}>
+              <div 
+                style={{ 
+                  width: 24, 
+                  height: 24, 
+                  borderRadius: "50%", 
+                  background: isActive ? T.surfaceEl : T.surfaceEl, 
+                  border: `2px solid ${color}`, 
+                  display: "flex", 
+                  alignItems: "center", 
+                  justifyContent: "center", 
+                  color: isActive ? T.text : T.faint 
+                }}
+              >
+                {isDone ? <Icons.check size={14} stroke={T.success} strokeWidth={3}/> : <span style={{ fontSize: 10 }}>{i + 1}</span>}
+              </div>
+              <span style={{ fontSize: 10, color: isActive ? T.text : T.faint, textAlign: "center", lineHeight: 1.2 }}>{step}</span>
+            </div>
+          );
+        })}
+      </div>
+    </WidgetShell>
+  );
+}
+
+function RepoAnalysisPage({ setActivePage }) {
+  const [status, setStatus] = useState("completed"); // "loading" | "running" | "completed" | "failed" | "empty" | "error"
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState("All");
+  const [sortFuncField, setSortFuncField] = useState("lines");
+  const [sortClassField, setSortClassField] = useState("methods");
+
+  const repoMeta = {
+    name: "frontend-platform",
+    version: "v2.1.4 (commit: 5aac192)",
+    duration: "18.4 seconds",
+    completedAt: "2 hours ago",
+    startedAt: "2 hours ago"
+  };
+
+  const scanSteps = [
+    "Repository Uploaded",
+    "Scanning Files",
+    "Reading Directories",
+    "Parsing Source Code",
+    "Extracting Metadata",
+    "Generating Results",
+    "Completed"
+  ];
+
+  const languages = [
+    { name: "TypeScript", percent: 45, files: 842, loc: 92400 },
+    { name: "React", percent: 22, files: 254, loc: 31200 },
+    { name: "JavaScript", percent: 12, files: 110, loc: 16800 },
+    { name: "Python", percent: 8, files: 42, loc: 12400 },
+    { name: "Go", percent: 5, files: 18, loc: 8400 },
+    { name: "Rust", percent: 3, files: 8, loc: 4200 },
+    { name: "Markdown", percent: 2, files: 34, loc: 4200 },
+    { name: "JSON", percent: 2, files: 82, loc: 11400 },
+    { name: "YAML", percent: 1, files: 12, loc: 2800 }
+  ];
+
+  const modules = [
+    { name: "auth-context", files: 4, functions: 14, classes: 1, exports: 6, imports: 22 },
+    { name: "ui-components", files: 48, functions: 128, classes: 0, exports: 42, imports: 94 },
+    { name: "api-client", files: 8, functions: 36, classes: 2, exports: 12, imports: 48 },
+    { name: "utils-library", files: 12, functions: 54, classes: 0, exports: 18, imports: 12 }
+  ];
+
+  const importsData = {
+    totalImportCount: 9642,
+    mostImported: [
+      { file: "useAuth.ts", count: 84 },
+      { file: "Button.tsx", count: 62 },
+      { file: "api.ts", count: 48 },
+      { file: "theme.ts", count: 36 }
+    ],
+    internal: ["/src/api/auth", "/src/components/common", "/src/hooks/useFetch"],
+    external: ["react", "react-dom", "vite", "typescript", "tailwindcss", "jest"]
+  };
+
+  const rawFunctions = [
+    { name: "login", file: "auth.ts", visibility: "public", lines: 24, complexity: "Medium", params: 2, returnType: "Promise<User>" },
+    { name: "fetchUsers", file: "users.ts", visibility: "public", lines: 18, complexity: "Low", params: 1, returnType: "Promise<User[]>" },
+    { name: "formatDate", file: "utils.ts", visibility: "private", lines: 8, complexity: "Low", params: 1, returnType: "string" },
+    { name: "renderGrid", file: "DataGrid.tsx", visibility: "public", lines: 112, complexity: "High", params: 3, returnType: "JSX.Element" },
+    { name: "useToggle", file: "hooks.ts", visibility: "public", lines: 12, complexity: "Low", params: 1, returnType: "[boolean, () => void]" }
+  ];
+
+  const rawClasses = [
+    { name: "AuthService", file: "AuthService.ts", methods: 8, properties: 3, inheritance: "BaseService" },
+    { name: "ApiClient", file: "api.ts", methods: 12, properties: 4, inheritance: "None" },
+    { name: "DataGrid", file: "DataGrid.tsx", methods: 14, properties: 6, inheritance: "Component" }
+  ];
+
+  const warnings = [
+    { type: "Large File", message: "DataGrid.tsx exceeds 100 lines of code (112 LOC). Consider modularizing.", level: "warning" },
+    { type: "Deep Nesting", message: "Folder depth at oauth-provider exceeds 5 levels. Best practice is < 4.", level: "info" },
+    { type: "Too Many Imports", message: "useAuth.ts imports 18 external modules. May indicate tight coupling.", level: "info" }
+  ];
+
+  // Filtering lists
+  const filteredFunctions = rawFunctions.filter(f => {
+    const matchesSearch = f.name.toLowerCase().includes(searchTerm.toLowerCase()) || f.file.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch;
+  }).sort((a, b) => b[sortFuncField] - a[sortFuncField]);
+
+  const filteredClasses = rawClasses.filter(c => {
+    return c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.file.toLowerCase().includes(searchTerm.toLowerCase());
+  }).sort((a, b) => b[sortClassField] - a[sortClassField]);
+
+  if (status === "loading") {
+    return (
+      <div style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ height: 40, width: 250, background: T.surfaceEl, borderRadius: T.r4, marginBottom: 24 }} className="skeleton-pulse" />
+        <div style={{ height: 120, background: T.surfaceEl, borderRadius: T.r6, marginBottom: 24 }} className="skeleton-pulse" />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+          {[1,2,3,4].map(i => <div key={i} style={{ height: 90, background: T.surfaceEl, borderRadius: T.r6 }} className="skeleton-pulse" />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "running") {
+    return (
+      <div style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
+        <AnalysisHeader repo={repoMeta} onReanalyze={() => setStatus("running")} onDownload={() => {}} status="running" />
+        <ScanProgressTimeline currentStep={3} steps={scanSteps} status="running" />
+        <div style={{ marginTop: 24, textAlign: "center", padding: 48, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8 }}>
+          <div style={{ fontSize: 16, color: T.text, marginBottom: 8 }}>Parsing Codebase AST...</div>
+          <div style={{ fontSize: 13, color: T.faint }}>Extracted 12 modules, analyzing functions and dependency relationships.</div>
+          <button onClick={() => setStatus("completed")} style={{ marginTop: 24, background: T.accent, color: "#fff", border: "none", padding: "8px 16px", borderRadius: T.r6, cursor: "pointer" }}>Simulate Completion</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "failed") {
+    return (
+      <div style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
+        <AnalysisHeader repo={repoMeta} onReanalyze={() => setStatus("running")} onDownload={() => {}} status="failed" />
+        <div style={{ textAlign: "center", padding: 48, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8 }}>
+          <Icons.error size={48} stroke={T.error} />
+          <h3 style={{ color: T.text, marginTop: 16 }}>Analysis Engine Failure</h3>
+          <p style={{ color: T.dim, marginTop: 8 }}>Vite configuration syntax error detected in config file. Run validation checks locally.</p>
+          <DashButton variant="primary" style={{ marginTop: 16, margin: "0 auto" }} onClick={() => setStatus("running")}>Retry Scan</DashButton>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+        <Icons.error size={48} stroke={T.error} />
+        <h2 style={{ color: T.text, marginTop: 16 }}>Internal System Error</h2>
+        <p style={{ color: T.dim, marginTop: 8 }}>Failed to connect to static analyzer microservice. Try again later.</p>
+        <DashButton variant="primary" style={{ marginTop: 24, margin: "0 auto" }} onClick={() => setStatus("completed")}>Reload Analysis</DashButton>
+      </div>
+    );
+  }
+
+  if (status === "empty") {
+    return (
+      <div style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+        <Icons.file size={48} />
+        <h2 style={{ color: T.text, marginTop: 16 }}>No Analysis Data Found</h2>
+        <p style={{ color: T.dim, marginTop: 8 }}>This repository has not been scanned yet. Please kick off a scan to view metrics.</p>
+        <DashButton variant="primary" style={{ marginTop: 24, margin: "0 auto" }} onClick={() => setStatus("running")}>Run First Scan</DashButton>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-in" style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
+      
+      {/* Dev Switch State controls */}
+      <div style={{ display: "flex", gap: 10, background: T.surface, border: `1px solid ${T.border}`, padding: 8, borderRadius: T.r6, marginBottom: 24, justifyContent: "flex-end" }}>
+        <span style={{ fontSize: 12, color: T.faint, alignSelf: "center", marginRight: 10 }}>Dev controls:</span>
+        <button onClick={() => setStatus("loading")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Loading</button>
+        <button onClick={() => setStatus("running")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Running</button>
+        <button onClick={() => setStatus("failed")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Fail</button>
+        <button onClick={() => setStatus("error")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Error</button>
+        <button onClick={() => setStatus("empty")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Empty</button>
+        <button onClick={() => setStatus("completed")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Success</button>
+      </div>
+
+      <AnalysisHeader repo={repoMeta} onReanalyze={() => setStatus("running")} onDownload={() => {}} status="completed" />
+
+      {/* Summary Cards Grid */}
+      <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 16, marginTop: 0 }}>Codebase Aggregates</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+        <StatCard label="Total Files" value="1,248" sub="TS & TSX" />
+        <StatCard label="Total Folders" value="142" />
+        <StatCard label="Total LOC" value="142,400" sub="Lines of code" />
+        <StatCard label="Languages Detected" value="9" sub="TS, React, Go, Py..." />
+        <StatCard label="Modules" value="12" />
+        <StatCard label="Packages" value="3" sub="Monorepo Packages" />
+        <StatCard label="Functions" value="4,217" />
+        <StatCard label="Classes" value="156" />
+        <StatCard label="Imports" value="9,642" />
+        <StatCard label="Average File Size" value="18.5 KB" />
+        <StatCard label="Largest File" value="DataGrid.tsx" sub="112 lines" />
+        <StatCard label="Largest Folder" value="/packages/ui" sub="14.2 MB" />
+      </div>
+
+      {/* Search & Filters */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+        <div style={{ flex: 1, position: "relative" }}>
+          <span style={{ position: "absolute", left: 12, top: 10, color: T.faint }}><Icons.search size={16} /></span>
+          <input 
+            type="text" 
+            placeholder="Search functions, classes or modules..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "8px 12px 8px 36px", color: T.text, outline: "none" }} 
+          />
+        </div>
+        <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "0 12px", borderRadius: T.r6, outline: "none" }}>
+          <option>Type: All Types</option>
+          <option>Functions</option>
+          <option>Classes</option>
+        </select>
+        <select 
+          value={selectedLanguage}
+          onChange={(e) => setSelectedLanguage(e.target.value)}
+          style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "0 12px", borderRadius: T.r6, outline: "none" }}
+        >
+          <option value="All">Language: All</option>
+          <option value="TypeScript">TypeScript</option>
+          <option value="React">React</option>
+        </select>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 24 }}>
+        {/* Left Column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <LanguageChart languages={languages} />
+          <FolderMetricsWidget />
+          <ModuleTableWidget modules={modules} />
+
+          <WidgetShell title="Analysis Warnings">
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {warnings.map((w, idx) => (
+                <div key={idx} style={{ background: T.surfaceEl, borderLeft: `4px solid ${w.level === "warning" ? T.warning : T.info}`, padding: 12, borderRadius: T.r6, display: "flex", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 650, color: T.text }}>{w.type}</div>
+                    <div style={{ fontSize: 12, color: T.dim, marginTop: 4 }}>{w.message}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: T.faint }}>Info</span>
+                </div>
+              ))}
+            </div>
+          </WidgetShell>
+        </div>
+
+        {/* Right Column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {/* Function Table */}
+          <WidgetShell title="Function Analysis">
+            <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+              <span style={{ fontSize: 11, color: T.faint, alignSelf: "center" }}>Sort by:</span>
+              <button onClick={() => setSortFuncField("lines")} style={{ padding: "4px 8px", background: sortFuncField === "lines" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortFuncField === "lines" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Lines</button>
+              <button onClick={() => setSortFuncField("params")} style={{ padding: "4px 8px", background: sortFuncField === "params" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortFuncField === "params" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Params</button>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${T.borderMid}`, color: T.faint, textAlign: "left" }}>
+                    <th style={{ padding: "8px 4px" }}>Function</th>
+                    <th style={{ padding: "8px 4px" }}>File</th>
+                    <th style={{ padding: "8px 4px" }}>Visibility</th>
+                    <th style={{ padding: "8px 4px" }}>Lines</th>
+                    <th style={{ padding: "8px 4px" }}>Params</th>
+                    <th style={{ padding: "8px 4px" }}>Return Type</th>
+                    <th style={{ padding: "8px 4px" }}>Complexity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredFunctions.map(f => (
+                    <tr key={f.name} style={{ borderBottom: `1px solid ${T.border}` }}>
+                      <td style={{ padding: "8px 4px", color: T.text, fontWeight: 500 }}>{f.name}()</td>
+                      <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{f.file}</td>
+                      <td style={{ padding: "8px 4px", color: T.dim }}>{f.visibility}</td>
+                      <td style={{ padding: "8px 4px", color: T.dim }}>{f.lines}</td>
+                      <td style={{ padding: "8px 4px", color: T.dim }}>{f.params}</td>
+                      <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{f.returnType}</td>
+                      <td style={{ padding: "8px 4px", color: f.complexity === "High" ? T.error : f.complexity === "Medium" ? T.warning : T.success }}>{f.complexity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </WidgetShell>
+
+          {/* Class Table */}
+          <WidgetShell title="Class Analysis">
+            <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+              <span style={{ fontSize: 11, color: T.faint, alignSelf: "center" }}>Sort by:</span>
+              <button onClick={() => setSortClassField("methods")} style={{ padding: "4px 8px", background: sortClassField === "methods" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortClassField === "methods" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Methods</button>
+              <button onClick={() => setSortClassField("properties")} style={{ padding: "4px 8px", background: sortClassField === "properties" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortClassField === "properties" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Properties</button>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${T.borderMid}`, color: T.faint, textAlign: "left" }}>
+                    <th style={{ padding: "8px 4px" }}>Class</th>
+                    <th style={{ padding: "8px 4px" }}>File</th>
+                    <th style={{ padding: "8px 4px" }}>Methods</th>
+                    <th style={{ padding: "8px 4px" }}>Props</th>
+                    <th style={{ padding: "8px 4px" }}>Inheritance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredClasses.map(c => (
+                    <tr key={c.name} style={{ borderBottom: `1px solid ${T.border}` }}>
+                      <td style={{ padding: "8px 4px", color: T.text, fontWeight: 500 }}>{c.name}</td>
+                      <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{c.file}</td>
+                      <td style={{ padding: "8px 4px", color: T.dim }}>{c.methods}</td>
+                      <td style={{ padding: "8px 4px", color: T.dim }}>{c.properties}</td>
+                      <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{c.inheritance}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </WidgetShell>
+
+          <ImportTableWidget imports={importsData} />
+
+          <WidgetShell title="AI Recommendations">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div 
+                onClick={() => setActivePage('arch')} 
+                style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 14, cursor: "pointer" }} 
+                className="repo-card"
+              >
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>Explore Architecture</div>
+                <div style={{ fontSize: 12, color: T.faint }}>Inspect system diagrams.</div>
+              </div>
+              <div 
+                onClick={() => setActivePage('deps')} 
+                style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 14, cursor: "pointer" }} 
+                className="repo-card"
+              >
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>View Dependencies</div>
+                <div style={{ fontSize: 12, color: T.faint }}>Track circular imports.</div>
+              </div>
+              <div 
+                onClick={() => setActivePage('repo-overview')} 
+                style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 14, cursor: "pointer" }} 
+                className="repo-card"
+              >
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>Open Largest Module</div>
+                <div style={{ fontSize: 12, color: T.faint }}>Inspect /packages/ui.</div>
+              </div>
+              <div 
+                onClick={() => setActivePage('repo-explorer')} 
+                style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 14, cursor: "pointer" }} 
+                className="repo-card"
+              >
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>Analyze Complex Files</div>
+                <div style={{ fontSize: 12, color: T.faint }}>Open DataGrid.tsx.</div>
+              </div>
+            </div>
+          </WidgetShell>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function PageStub({ pageId, setActivePage }) {
   if (pageId === "dashboard") return <DashboardPage setActivePage={setActivePage} />;
   if (pageId === "projects") return <ProjectsPage />;
   if (pageId === "repos")    return <RepositoriesPage setActivePage={setActivePage} />;
   if (pageId === "repo-overview") return <RepoOverviewPage setActivePage={setActivePage} />;
   if (pageId === "repo-explorer") return <RepoExplorerPage setActivePage={setActivePage} />;
+  if (pageId === "repo-analysis") return <RepoAnalysisPage setActivePage={setActivePage} />;
   
   const meta = PAGE_META[pageId] || { label: "Page", breadcrumb: [pageId] };
   return (
