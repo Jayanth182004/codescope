@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { ReactFlow, ReactFlowProvider, useReactFlow, MiniMap, Controls, Background, useNodesState, useEdgesState, MarkerType, Handle, Position } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 
 /* ─── DESIGN TOKENS ─────────────────────────────────────────────────────────
    Dark shell: near-black base, subtle zinc surfaces, single teal accent.
@@ -247,7 +249,7 @@ function AuthBtn({ children, onClick, loading, disabled, variant = "primary" }) 
   };
   return (
     <button
-      onClick={onClick}
+      onClick={onClick} type={type}
       disabled={loading || disabled}
       style={{ ...base, ...variants[variant] }}
       onMouseEnter={e => { if (!loading && !disabled) e.currentTarget.style.opacity = "0.85"; }}
@@ -361,7 +363,7 @@ function LoginPage({ nav }) {
       <AuthDivider />
 
       {/* Fields */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <AuthInput label="Email" type="email" value={email} onChange={setEmail} placeholder="you@company.com" error={errors.email} autoFocus />
         <AuthInput label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" error={errors.password} />
 
@@ -373,8 +375,8 @@ function LoginPage({ nav }) {
           <button onClick={() => nav("forgot")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: T.accent }}>Forgot password?</button>
         </div>
 
-        <AuthBtn onClick={handleSubmit} loading={loading}>Sign in</AuthBtn>
-      </div>
+        <AuthBtn type="submit" loading={loading}>Sign in</AuthBtn>
+      </form>
 
       <p style={{ fontSize: 12, color: T.faint, textAlign: "center", marginTop: 20 }}>
         No account?{" "}
@@ -410,13 +412,13 @@ function RegisterPage({ nav }) {
 
   return (
     <AuthShell title="Create account" subtitle="Start understanding your codebase">
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <AuthInput label="Full name" value={form.name} onChange={set("name")} placeholder="Arjun Mehta" error={errors.name} autoFocus />
         <AuthInput label="Email" type="email" value={form.email} onChange={set("email")} placeholder="you@company.com" error={errors.email} />
         <AuthInput label="Password" type="password" value={form.password} onChange={set("password")} placeholder="Min. 8 characters" error={errors.password} />
         <AuthInput label="Confirm password" type="password" value={form.confirm} onChange={set("confirm")} placeholder="Re-enter password" error={errors.confirm} />
-        <AuthBtn onClick={handleSubmit} loading={loading}>Create account</AuthBtn>
-      </div>
+        <AuthBtn type="submit" loading={loading}>Create account</AuthBtn>
+      </form>
       <p style={{ fontSize: 12, color: T.faint, textAlign: "center", marginTop: 20 }}>
         Already have an account?{" "}
         <button onClick={() => nav("login")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: T.accent }}>Sign in</button>
@@ -449,11 +451,11 @@ function ForgotPage({ nav }) {
           <button onClick={() => nav("login")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: T.accent }}>Back to sign in</button>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <AuthInput label="Email" type="email" value={email} onChange={setEmail} placeholder="you@company.com" error={error} autoFocus />
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <AuthInput label="Email" type="email" value={email} onChange={setEmail} placeholder="you@company.com" error={error} autoFocus />
           <AuthBtn onClick={handleSubmit} loading={loading}>Send reset link</AuthBtn>
           <button onClick={() => nav("login")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: T.faint, textAlign: "center" }}>← Back to sign in</button>
-        </div>
+        </form>
       )}
     </AuthShell>
   );
@@ -477,11 +479,11 @@ function ResetPage({ nav }) {
 
   return (
     <AuthShell title="New password" subtitle="Choose a strong password">
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <AuthInput label="New password" type="password" value={password} onChange={setPassword} placeholder="Min. 8 characters" error={errors.password} autoFocus />
         <AuthInput label="Confirm password" type="password" value={confirm} onChange={setConfirm} placeholder="Re-enter password" error={errors.confirm} />
-        <AuthBtn onClick={handleSubmit} loading={loading}>Reset password</AuthBtn>
-      </div>
+        <AuthBtn type="submit" loading={loading}>Reset password</AuthBtn>
+      </form>
     </AuthShell>
   );
 }
@@ -640,19 +642,40 @@ function Sidebar({ collapsed, setCollapsed, activePage, setActivePage }) {
 }
 
 /* ─── Breadcrumb ─────────────────────────────────────────────────────────── */
-function Breadcrumb({ trail }) {
+const BREADCRUMB_ROUTE_MAP = {
+  "Dashboard": "dashboard",
+  "Projects": "projects",
+  "Repositories": "repos",
+  "frontend-platform": "repo-overview",
+  "Graph Explorer": "knowledge-graph",
+  "Analysis": "repo-analysis",
+  "Explorer": "repo-explorer"
+};
+
+function Breadcrumb({ trail, setActivePage }) {
   return (
     <nav aria-label="Breadcrumb" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      {trail.map((crumb, i) => (
-        <span key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          {i > 0 && <span style={{ color: T.faint, fontSize: 12, marginTop: 1 }}><Icons.chevronRight /></span>}
-          <span style={{
-            fontSize: 13, color: i === trail.length - 1 ? T.text : T.faint,
-            fontWeight: i === trail.length - 1 ? 500 : 400,
-            cursor: i < trail.length - 1 ? "pointer" : "default",
-          }}>{crumb}</span>
-        </span>
-      ))}
+      {trail.map((crumb, i) => {
+        const isLast = i === trail.length - 1;
+        const targetRoute = BREADCRUMB_ROUTE_MAP[crumb];
+        const isClickable = !isLast && targetRoute && setActivePage;
+        return (
+          <span key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {i > 0 && <span style={{ color: T.faint, fontSize: 12, marginTop: 1 }}><Icons.chevronRight /></span>}
+            <span 
+              onClick={() => { if(isClickable) setActivePage(targetRoute); }}
+              style={{
+                fontSize: 13, color: isLast ? T.text : (isClickable ? T.dim : T.faint),
+                fontWeight: isLast ? 500 : 400,
+                cursor: isClickable ? "pointer" : "default",
+                transition: "color 0.2s ease"
+              }}
+              onMouseEnter={e => { if(isClickable) e.target.style.color = T.text; }}
+              onMouseLeave={e => { if(isClickable) e.target.style.color = T.dim; }}
+            >{crumb}</span>
+          </span>
+        );
+      })}
     </nav>
   );
 }
@@ -748,7 +771,7 @@ function GlobalSearch() {
 }
 
 /* ─── TopNav ─────────────────────────────────────────────────────────────── */
-function TopNav({ breadcrumb, sidebarCollapsed }) {
+function TopNav({ breadcrumb, sidebarCollapsed, setActivePage }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [repoOpen, setRepoOpen] = useState(false);
@@ -775,7 +798,7 @@ function TopNav({ breadcrumb, sidebarCollapsed }) {
     }}>
       {/* Breadcrumb */}
       <div style={{ flex: 1 }}>
-        <Breadcrumb trail={breadcrumb} />
+        <Breadcrumb trail={breadcrumb} setActivePage={setActivePage} />
       </div>
 
       {/* Repo selector */}
@@ -889,6 +912,7 @@ const PAGE_META = {
   'repo-overview': { label: "Repository Overview", breadcrumb: ["Dashboard", "Repositories", "frontend-platform"] },
   'repo-explorer': { label: "Repository Explorer", breadcrumb: ["Dashboard", "Repositories", "frontend-platform", "Explorer"] },
   'repo-analysis': { label: "Repository Analysis", breadcrumb: ["Dashboard", "Repositories", "frontend-platform", "Analysis"] },
+  'knowledge-graph': { label: "Knowledge Graph", breadcrumb: ["Dashboard", "Repositories", "frontend-platform", "Graph Explorer"] },
 };
 
 const dashboardData = {
@@ -951,7 +975,7 @@ function DashButton({ children, variant = "ghost", onClick, title }) {
   const isPrimary = variant === "primary";
   return (
     <button
-      onClick={onClick}
+      onClick={onClick} type={type}
       title={title}
       style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
@@ -1291,1039 +1315,76 @@ function DashboardPage({ setActivePage }) {
 }
 
 function ProjectsPage() {
-  // --- Simulation States ---
-  const [viewState, setViewState] = useState("loaded"); // loaded | loading | empty | error
-  
-  // --- Workspaces ---
-  const [workspaces, setWorkspaces] = useState([
-    { id: "ws-1", name: "Northstar Platform", avatar: "NP", members: ["AM", "SK", "JL", "TR"], projectCount: 5 },
-    { id: "ws-2", name: "Alpha Core Labs", avatar: "AC", members: ["AM", "JL"], projectCount: 3 },
-    { id: "ws-3", name: "Personal Experiments", avatar: "PE", members: ["AM"], projectCount: 1 }
-  ]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState("ws-1");
-  const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
-  const [isCreateWsOpen, setIsCreateWsOpen] = useState(false);
-  const [newWsName, setNewWsName] = useState("");
-  
+  const [searchTerm, setSearchTerm] = useState("");
   const [projects, setProjects] = useState([
-    {
-      id: "p-1",
-      workspaceId: "ws-1",
-      name: "Core Gateway API",
-      description: "Codebase analyzer edge routing, gateway token verification, and reverse proxy definitions.",
-      owner: "Arjun Mehta",
-      createdDate: "2026-02-14",
-      repositoryCount: 3,
-      repoHealths: [90, 85, 92], // health breakdown for sub-repositories
-      lastAnalysis: "12 min ago",
-      healthScore: 89,
-      favorite: true,
-      icon: "🌐",
-      color: "#3D8B7A",
-      visibility: "Private"
-    },
-    {
-      id: "p-2",
-      workspaceId: "ws-1",
-      name: "Checkout Integration",
-      description: "Stripe and Adyen webhooks orchestrator, checkout workflows, and user subscription mapping.",
-      owner: "Sarah Kim",
-      createdDate: "2026-03-01",
-      repositoryCount: 2,
-      repoHealths: [94, 90],
-      lastAnalysis: "45 min ago",
-      healthScore: 92,
-      favorite: true,
-      icon: "💳",
-      color: "#58A6FF",
-      visibility: "Private"
-    },
-    {
-      id: "p-3",
-      workspaceId: "ws-1",
-      name: "User Authentication Gateway",
-      description: "Multi-tenant auth services, OAuth2 wrappers, security key protocols, and session stores.",
-      owner: "Julian Lee",
-      createdDate: "2026-01-20",
-      repositoryCount: 4,
-      repoHealths: [50, 72, 60, 62],
-      lastAnalysis: "1 hr ago",
-      healthScore: 61,
-      favorite: false,
-      icon: "🔒",
-      color: "#F85149",
-      visibility: "Internal"
-    },
-    {
-      id: "p-4",
-      workspaceId: "ws-1",
-      name: "ML Processing Pipelines",
-      description: "Data preparation scripts, feature maps generator, PyTorch service templates, and export utilities.",
-      owner: "Arjun Mehta",
-      createdDate: "2026-04-10",
-      repositoryCount: 5,
-      repoHealths: [88, 80, 82, 85, 85],
-      lastAnalysis: "Yesterday",
-      healthScore: 84,
-      favorite: false,
-      icon: "🧠",
-      color: "#D29922",
-      visibility: "Private"
-    },
-    {
-      id: "p-5",
-      workspaceId: "ws-1",
-      name: "Developer Documentation Hub",
-      description: "Astro-based documentation site generated automatically from backend type definitions.",
-      owner: "Tanya Ray",
-      createdDate: "2026-05-18",
-      repositoryCount: 1,
-      repoHealths: [97],
-      lastAnalysis: "3 days ago",
-      healthScore: 97,
-      favorite: false,
-      icon: "📝",
-      color: "#79C0FF",
-      visibility: "Public"
-    },
-    
-    // Workspace 2 Projects
-    {
-      id: "p-6",
-      workspaceId: "ws-2",
-      name: "Alpha Compute Infrastructure",
-      description: "Kubernetes config, Helm templates, Terraform modules, and environment manifests.",
-      owner: "Julian Lee",
-      createdDate: "2026-05-01",
-      repositoryCount: 6,
-      repoHealths: [95, 96, 92, 94, 93, 95],
-      lastAnalysis: "2 hrs ago",
-      healthScore: 94,
-      favorite: true,
-      icon: "🛡️",
-      color: "#3D8B7A",
-      visibility: "Private"
-    },
-    {
-      id: "p-7",
-      workspaceId: "ws-2",
-      name: "Alpha Analytics Service",
-      description: "Telemetry ingestion handlers, Clickhouse schema migration tools, and dashboard APIs.",
-      owner: "Arjun Mehta",
-      createdDate: "2026-05-12",
-      repositoryCount: 2,
-      repoHealths: [74, 82],
-      lastAnalysis: "1 day ago",
-      healthScore: 78,
-      favorite: false,
-      icon: "📊",
-      color: "#D29922",
-      visibility: "Private"
-    },
-    {
-      id: "p-8",
-      workspaceId: "ws-2",
-      name: "Billing Adapter V2",
-      description: "Internal ledger microservice syncing transaction states with invoice engines.",
-      owner: "Arjun Mehta",
-      createdDate: "2026-06-02",
-      repositoryCount: 1,
-      repoHealths: [100],
-      lastAnalysis: "Never",
-      healthScore: 100,
-      favorite: false,
-      icon: "⚡",
-      color: "#F85149",
-      visibility: "Internal"
-    },
-
-    // Workspace 3 Projects
-    {
-      id: "p-9",
-      workspaceId: "ws-3",
-      name: "My Indie Projects Repo",
-      description: "Playground for experiments, helper scripts, and boilerplate templates.",
-      owner: "Arjun Mehta",
-      createdDate: "2026-01-01",
-      repositoryCount: 12,
-      repoHealths: [80, 82, 85, 81, 84, 82, 80, 83, 82, 85, 80, 82],
-      lastAnalysis: "1 week ago",
-      healthScore: 82,
-      favorite: true,
-      icon: "🏠",
-      color: "#3D8B7A",
-      visibility: "Private"
-    }
+    { id: "p1", name: "Northstar Platform", envs: 4, repos: 12, health: 92, status: "Active" },
+    { id: "p2", name: "Mobile API Gateway", envs: 2, repos: 3, health: 68, status: "Warning" },
+    { id: "p3", name: "Data Warehouse", envs: 3, repos: 8, health: 98, status: "Active" },
+    { id: "p4", name: "Legacy Monolith", envs: 1, repos: 1, health: 42, status: "Critical" },
+    { id: "p5", name: "Customer Portal", envs: 4, repos: 5, health: 88, status: "Active" }
   ]);
 
-  // --- Filtering & Search ---
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all"); // all | healthy | warning | critical
-  const [filterRepoCount, setFilterRepoCount] = useState("all"); // all | single | multiple
-  const [filterFavorite, setFilterFavorite] = useState(false);
-  const [sortBy, setSortBy] = useState("recent"); // recent | name | health
-
-  // --- Keyboard Shortcuts Search Box ---
-  const searchInputRef = useRef(null);
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  // --- Create Project Modal Form ---
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalStep, setModalStep] = useState("form"); // form | loading | success
-  const [formName, setFormName] = useState("");
-  const [formDesc, setFormDesc] = useState("");
-  const [formIcon, setFormIcon] = useState("🌐");
-  const [formColor, setFormColor] = useState("#3D8B7A");
-  const [formVisibility, setFormVisibility] = useState("Private");
-  const [formErrors, setFormErrors] = useState({});
-
-  // --- Card Action Menu ---
-  const [activeMenuId, setActiveMenuId] = useState(null);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    const clickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setActiveMenuId(null);
-      }
-    };
-    document.addEventListener("mousedown", clickOutside);
-    return () => document.removeEventListener("mousedown", clickOutside);
-  }, []);
-
-  // --- Workspace Switch helper ---
-  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId) || workspaces[0];
-
-  // --- Calculations ---
-  const activeWorkspaceProjects = projects.filter(p => p.workspaceId === activeWorkspaceId);
-
-  const filteredProjects = activeWorkspaceProjects.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          p.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    let matchesStatus = true;
-    if (filterStatus === "healthy") matchesStatus = p.healthScore >= 85;
-    else if (filterStatus === "warning") matchesStatus = p.healthScore >= 70 && p.healthScore < 85;
-    else if (filterStatus === "critical") matchesStatus = p.healthScore < 70;
-
-    let matchesRepo = true;
-    if (filterRepoCount === "single") matchesRepo = p.repositoryCount <= 1;
-    else if (filterRepoCount === "multiple") matchesRepo = p.repositoryCount > 1;
-
-    const matchesFav = filterFavorite ? p.favorite === true : true;
-
-    return matchesSearch && matchesStatus && matchesRepo && matchesFav;
-  }).sort((a, b) => {
-    if (sortBy === "name") return a.name.localeCompare(b.name);
-    if (sortBy === "health") return b.healthScore - a.healthScore;
-    return 1; // default fallback keeps creation order/recent
-  });
-
-  const totalWorkspaceRepos = activeWorkspaceProjects.reduce((acc, p) => acc + p.repositoryCount, 0);
-  const avgHealth = Math.round(activeWorkspaceProjects.reduce((acc, p) => acc + p.healthScore, 0) / (activeWorkspaceProjects.length || 1));
-  const indexedDepsCount = activeWorkspaceProjects.reduce((acc, p) => acc + p.repositoryCount * 187, 0);
-
-  // --- Actions ---
-  const handleToggleFavorite = (projId) => {
-    setProjects(prev => prev.map(p => p.id === projId ? { ...p, favorite: !p.favorite } : p));
-  };
-
-  const handleDuplicateProject = (proj) => {
-    const newProj = {
-      ...proj,
-      id: "p-" + Date.now(),
-      name: `${proj.name} (Copy)`,
-      createdDate: new Date().toISOString().split("T")[0],
-      favorite: false
-    };
-    setProjects(prev => [...prev, newProj]);
-    setActiveMenuId(null);
-  };
-
-  const handleDeleteProject = (projId) => {
-    if (confirm("Are you sure you want to delete this project? All meta histories will be lost.")) {
-      setProjects(prev => prev.filter(p => p.id !== projId));
-    }
-    setActiveMenuId(null);
-  };
-
-  const handleCreateWorkspace = (e) => {
-    e.preventDefault();
-    if (!newWsName.trim()) return;
-    const newId = "ws-" + Date.now();
-    const newWs = {
-      id: newId,
-      name: newWsName,
-      avatar: newWsName.substring(0, 2).toUpperCase(),
-      members: ["AM"],
-      projectCount: 0
-    };
-    setWorkspaces(prev => [...prev, newWs]);
-    setActiveWorkspaceId(newId);
-    setNewWsName("");
-    setIsCreateWsOpen(false);
-  };
-
-  const handleCreateProjectSubmit = (e) => {
-    e.preventDefault();
-    const errors = {};
-    if (!formName.trim()) errors.name = "Project name is required.";
-    else if (formName.length < 3) errors.name = "Name must be at least 3 characters.";
-
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
-      return;
-    }
-
-    setFormErrors({});
-    setModalStep("loading");
-
-    // Simulate database / indexing latency
-    setTimeout(() => {
-      const newProjObj = {
-        id: "p-" + Date.now(),
-        workspaceId: activeWorkspaceId,
-        name: formName,
-        description: formDesc || "No description provided.",
-        owner: "Arjun Mehta",
-        createdDate: new Date().toISOString().split("T")[0],
-        repositoryCount: 0,
-        repoHealths: [],
-        lastAnalysis: "Never",
-        healthScore: 100,
-        favorite: false,
-        icon: formIcon,
-        color: formColor,
-        visibility: formVisibility
-      };
-
-      setProjects(prev => [newProjObj, ...prev]);
-      setModalStep("success");
-    }, 1500);
-  };
-
-  const resetForm = () => {
-    setFormName("");
-    setFormDesc("");
-    setFormIcon("🌐");
-    setFormColor("#3D8B7A");
-    setFormVisibility("Private");
-    setFormErrors({});
-    setModalStep("form");
-    setIsModalOpen(false);
-  };
-
-  // --- Dynamic State Overrides ---
-  const simulateLoading = viewState === "loading";
-  const simulateError = viewState === "error";
-  const simulateEmpty = viewState === "empty" || activeWorkspaceProjects.length === 0;
+  const filteredProjects = projects.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="page-in" style={{ padding: "24px 32px 64px", maxWidth: 1480, margin: "0 auto" }}>
-      
-      {/* Simulation Controller Row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 24, padding: "8px 12px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ color: T.faint, fontSize: 11, fontFamily: T.mono }}>PREVIEW STATE CONTROL:</span>
-          {["loaded", "loading", "empty", "error"].map(state => (
-            <button key={state} onClick={() => setViewState(state)} style={{
-              background: viewState === state ? T.accentSoft : "transparent",
-              color: viewState === state ? T.accentBright : T.faint,
-              border: `1px solid ${viewState === state ? T.accentBorder : "transparent"}`,
-              borderRadius: T.r4,
-              padding: "4px 8px",
-              cursor: "pointer",
-              fontSize: 11,
-              fontWeight: 500,
-              textTransform: "capitalize",
-            }}>{state}</button>
-          ))}
+    <div className="page-in" style={{ padding: "32px 36px", maxWidth: 1200, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 32 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 600, color: T.text, letterSpacing: "-0.02em", marginBottom: 6 }}>Projects</h1>
+          <p style={{ fontSize: 13, color: T.dim }}>Manage your workspaces and aggregate repository analytics.</p>
         </div>
-        <div style={{ fontSize: 11, color: T.faint, fontFamily: T.mono }}>
-          CodeScope AI Workspace Orchestrator v1.4
-        </div>
+        <DashButton icon={Icons.upload} label="New Project" variant="primary" onClick={() => {}} />
       </div>
 
-      {/* --- HEADER SECTION --- */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, marginBottom: 28, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: T.accentBright, textTransform: "uppercase", letterSpacing: "0.05em" }}>Workspaces</span>
-            <span style={{ width: 4, height: 4, borderRadius: "50%", background: T.faint }} />
-            <span style={{ fontSize: 12, color: T.faint }}>Project Directory</span>
-          </div>
-          
-          <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative" }}>
-            {/* Workspace Avatar */}
-            <div style={{ width: 32, height: 32, borderRadius: T.r8, background: T.accentSoft, border: `1px solid ${T.accentBorder}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: T.accentBright, fontSize: 14 }}>
-              {activeWorkspace.avatar}
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <h1 style={{ fontSize: 24, fontWeight: 700, color: T.text, letterSpacing: "-0.02em" }}>
-                  {activeWorkspace.name}
-                </h1>
-
-                {/* Pulsing Active Syncing Indicator */}
-                <span 
-                  title="Workspace syncing with VCS provider"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "3px 8px",
-                    background: "rgba(63,185,80,0.12)",
-                    border: `1px solid ${T.success}33`,
-                    borderRadius: 999,
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: T.success
-                  }}
-                >
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.success, animation: "pulseGreen 1.5s infinite" }} />
-                  Live Sync
-                </span>
-
-                {/* Dropdown Toggle */}
-                <button 
-                  onClick={() => setWsDropdownOpen(prev => !prev)}
-                  style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.dim, borderRadius: T.r6, padding: 6, display: "flex", cursor: "pointer" }}
-                  aria-label="Switch workspace"
-                >
-                  <Icons.chevronDown />
-                </button>
-              </div>
-            </div>
-
-            {/* Switch Workspace Dropdown */}
-            {wsDropdownOpen && (
-              <div className="nav-dropdown" style={{ position: "absolute", top: "100%", left: 0, marginTop: 8, background: T.surfaceEl, border: `1px solid ${T.borderMid}`, borderRadius: T.r8, padding: 8, width: 260, boxShadow: T.shadowLg, zIndex: 100 }}>
-                <p style={{ fontSize: 11, color: T.faint, padding: "4px 8px" }}>Select Workspace</p>
-                {workspaces.map(ws => (
-                  <button
-                    key={ws.id}
-                    onClick={() => {
-                      setActiveWorkspaceId(ws.id);
-                      setWsDropdownOpen(false);
-                    }}
-                    style={{
-                      width: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "8px 10px",
-                      borderRadius: T.r6,
-                      background: activeWorkspaceId === ws.id ? T.accentSoft : "transparent",
-                      border: "none",
-                      color: activeWorkspaceId === ws.id ? T.accentBright : T.dim,
-                      cursor: "pointer",
-                      textAlign: "left"
-                    }}
-                    onMouseEnter={e => { if (activeWorkspaceId !== ws.id) e.currentTarget.style.background = T.surfaceHov; }}
-                    onMouseLeave={e => { if (activeWorkspaceId !== ws.id) e.currentTarget.style.background = "transparent"; }}
-                  >
-                    <div style={{ width: 22, height: 22, borderRadius: T.r4, background: activeWorkspaceId === ws.id ? T.accentBorder : T.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700 }}>
-                      {ws.avatar}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500 }}>{ws.name}</div>
-                      <div style={{ fontSize: 10, color: T.faint }}>{ws.members.length} members · {projects.filter(p => p.workspaceId === ws.id).length} projects</div>
-                    </div>
-                    {activeWorkspaceId === ws.id && <span style={{ color: T.accentBright }}>✓</span>}
-                  </button>
-                ))}
-
-                <div style={{ height: 1, background: T.border, margin: "6px 0" }} />
-                
-                {isCreateWsOpen ? (
-                  <form onSubmit={handleCreateWorkspace} style={{ padding: "4px 8px" }}>
-                    <input 
-                      type="text"
-                      placeholder="Workspace name..."
-                      value={newWsName}
-                      onChange={e => setNewWsName(e.target.value)}
-                      style={{ width: "100%", background: T.bg, border: `1px solid ${T.borderMid}`, borderRadius: T.r4, color: T.text, fontSize: 12, padding: "5px 8px", outline: "none", marginBottom: 6 }}
-                    />
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button type="submit" style={{ flex: 1, background: T.accent, border: "none", borderRadius: T.r4, color: "#fff", fontSize: 11, padding: "4px 0", cursor: "pointer" }}>Create</button>
-                      <button type="button" onClick={() => setIsCreateWsOpen(false)} style={{ flex: 1, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.dim, fontSize: 11, padding: "4px 0", cursor: "pointer" }}>Cancel</button>
-                    </div>
-                  </form>
-                ) : (
-                  <button 
-                    onClick={() => setIsCreateWsOpen(true)}
-                    style={{ width: "100%", background: "none", border: "none", padding: "8px 10px", borderRadius: T.r6, cursor: "pointer", color: T.accentBright, fontSize: 12, textAlign: "left", display: "flex", alignItems: "center", gap: 6 }}
-                  >
-                    <span>+</span> Create New Workspace
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+      {/* Controls */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, alignItems: "center" }}>
+        <div style={{ position: "relative", width: 280 }}>
+          <div style={{ position: "absolute", left: 12, top: 9, color: T.faint }}><Icons.search size={14} /></div>
+          <input 
+            type="text" 
+            placeholder="Search projects..." 
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            style={{ width: "100%", padding: "7px 12px 7px 34px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, fontSize: 13, outline: "none" }}
+          />
         </div>
+        <DashButton icon={Icons.gridView} label="Filter" variant="secondary" onClick={() => {}} />
+      </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          {/* Workspace Members Avatars */}
-          <div style={{ display: "flex", alignItems: "center", marginRight: 8 }}>
-            {activeWorkspace.members.map((m, idx) => (
-              <div 
-                key={m} 
-                title={`${m} (Collaborator)`}
-                style={{ 
-                  width: 28, 
-                  height: 28, 
-                  borderRadius: "50%", 
-                  background: T.surfaceEl, 
-                  border: `2px solid ${T.bg}`, 
-                  color: T.dim, 
-                  display: "flex", 
-                  alignItems: "center", 
-                  justifyContent: "center", 
-                  fontSize: 10, 
-                  fontWeight: 600,
-                  marginLeft: idx === 0 ? 0 : -8,
-                  zIndex: 10 - idx
-                }}
-              >
-                {m}
-              </div>
-            ))}
-            <button 
-              title="Invite Members"
-              style={{ width: 28, height: 28, borderRadius: "50%", background: T.surfaceEl, border: `2px solid ${T.bg}`, color: T.faint, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, marginLeft: -8, zIndex: 0, cursor: "pointer" }}
-            >
-              +
-            </button>
-          </div>
-
-          <DashButton onClick={() => alert("Workspace settings are configuration placeholders.")}>
-            <Icons.settings /> Settings
-          </DashButton>
-
-          <DashButton variant="primary" onClick={() => { setIsModalOpen(true); setModalStep("form"); }}>
-            <span>+</span> Create Project
-          </DashButton>
+      {/* Project Grid */}
+      {filteredProjects.length === 0 ? (
+        <div style={{ padding: 60, textAlign: "center", color: T.faint, background: T.surface, borderRadius: T.r8, border: `1px solid ${T.border}` }}>
+          <Icons.search size={24} />
+          <div style={{ marginTop: 12, fontSize: 14 }}>No projects found matching "{searchTerm}".</div>
         </div>
-      </header>
-
-      {/* --- ERROR STATE PANEL --- */}
-      {simulateError && (
-        <div style={{ background: `${T.error}0a`, border: `1px solid ${T.error}40`, borderRadius: T.r8, padding: "40px 24px", textAlign: "center", marginBottom: 32 }}>
-          <div style={{ color: T.error, fontSize: 32, marginBottom: 12 }}>⚠️</div>
-          <h3 style={{ fontSize: 16, fontWeight: 650, color: T.text, marginBottom: 8 }}>Failed to retrieve projects list</h3>
-          <p style={{ fontSize: 13, color: T.dim, maxWidth: 480, margin: "0 auto 20px" }}>
-            The API endpoint timed out while querying workspace databases. Ensure your organization billing is active and try again.
-          </p>
-          <DashButton onClick={() => setViewState("loaded")} variant="primary">
-            Retry Connection
-          </DashButton>
-        </div>
-      )}
-
-      {/* --- STATISTICS PANELS --- */}
-      {!simulateError && (
-        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
-          {simulateLoading ? (
-            Array.from({ length: 6 }).map((_, idx) => (
-              <div key={idx} className="dash-skeleton" style={{ height: 100, borderRadius: T.r8 }} />
-            ))
-          ) : (
-            <>
-              <MetricCard label="Total Projects" value={simulateEmpty ? 0 : activeWorkspaceProjects.length} trend="Active Scope" color={T.accentBright} />
-              <MetricCard label="Repositories Connected" value={simulateEmpty ? 0 : totalWorkspaceRepos} trend="Syncing" color={T.info} />
-              <MetricCard label="Workspace Avg Health" value={simulateEmpty ? "—" : `${avgHealth}%`} trend={avgHealth >= 80 ? "Optimal" : "Attention"} color={avgHealth >= 80 ? T.success : T.warning} />
-              <MetricCard label="Dependencies Indexed" value={simulateEmpty ? 0 : indexedDepsCount.toLocaleString()} trend="Indexed" color={T.accentBright} />
-              <MetricCard label="Architecture Graphs" value={simulateEmpty ? 0 : activeWorkspaceProjects.length * 2} trend="Calculated" color={T.info} />
-              <MetricCard label="Last Workspace Activity" value={simulateEmpty ? "Never" : "12 min ago"} trend="Syncing live" color={T.success} />
-            </>
-          )}
-        </section>
-      )}
-
-      {/* --- SEARCH & FILTERS CONTROLS --- */}
-      {!simulateError && (
-        <section style={{ display: "flex", flexDirection: "column", gap: 16, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 16, marginBottom: 32 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center" }}>
-            {/* Search Input */}
-            <div style={{ position: "relative" }}>
-              <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}>
-                <Icons.search />
-              </span>
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search projects by name or keywords... (Press Ctrl + F to focus)"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                style={{
-                  width: "100%",
-                  height: 40,
-                  background: T.bg,
-                  border: `1px solid ${T.borderMid}`,
-                  borderRadius: T.r6,
-                  color: T.text,
-                  padding: "0 100px 0 38px",
-                  fontSize: 13,
-                  outline: "none"
-                }}
-              />
-              <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 10, fontFamily: T.mono, color: T.faint, background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "2px 6px" }}>
-                Ctrl + F
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button 
-                onClick={() => setFilterFavorite(prev => !prev)}
-                style={{
-                  height: 40,
-                  padding: "0 16px",
-                  background: filterFavorite ? T.accentSoft : T.surfaceEl,
-                  border: `1px solid ${filterFavorite ? T.accentBorder : T.border}`,
-                  borderRadius: T.r6,
-                  color: filterFavorite ? T.accentBright : T.dim,
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6
-                }}
-              >
-                ★ Favorites Only
-              </button>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, borderTop: `1px solid ${T.border}`, paddingTop: 14 }}>
-            {/* Filter selectors */}
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 11, color: T.faint }}>Health Status:</span>
-                <select 
-                  value={filterStatus}
-                  onChange={e => setFilterStatus(e.target.value)}
-                  style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, padding: "5px 10px", fontSize: 12, outline: "none", cursor: "pointer" }}
-                >
-                  <option value="all">All Health Scores</option>
-                  <option value="healthy">Healthy (&gt;= 85)</option>
-                  <option value="warning">Warning (70 - 84)</option>
-                  <option value="critical">Critical (&lt; 70)</option>
-                </select>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 11, color: T.faint }}>Repo Load:</span>
-                <select 
-                  value={filterRepoCount}
-                  onChange={e => setFilterRepoCount(e.target.value)}
-                  style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, padding: "5px 10px", fontSize: 12, outline: "none", cursor: "pointer" }}
-                >
-                  <option value="all">All Sizes</option>
-                  <option value="single">Single Repository</option>
-                  <option value="multiple">Multi-Repository</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Sorting */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 11, color: T.faint }}>Sort By:</span>
-              <select 
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value)}
-                style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, padding: "5px 10px", fontSize: 12, outline: "none", cursor: "pointer" }}
-              >
-                <option value="recent">Recently Created</option>
-                <option value="name">Alphabetical (A-Z)</option>
-                <option value="health">Health Rating</option>
-              </select>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* --- RECENT PROJECTS BLOCK --- */}
-      {!simulateError && !simulateEmpty && !simulateLoading && (
-        <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 650, color: T.text, marginBottom: 12, letterSpacing: "-0.01em" }}>Last Opened Projects</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-            {filteredProjects.slice(0, 3).map(p => (
-              <div 
-                key={`recent-${p.id}`}
-                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 16 }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ fontSize: 20 }}>{p.icon}</span>
-                  <div>
-                    <h3 style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{p.name}</h3>
-                    <p style={{ fontSize: 11, color: T.faint }}>{p.repositoryCount} connected · last analysis {p.lastAnalysis}</p>
-                  </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 42, display: "flex", flexDirection: "column", gap: 4 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontFamily: T.mono, color: T.faint }}>
-                      <span>HLTH</span>
-                      <span style={{ color: p.healthScore >= 85 ? T.success : p.healthScore >= 70 ? T.warning : T.error }}>{p.healthScore}%</span>
-                    </div>
-                    <ProgressBar value={p.healthScore} color={p.healthScore >= 85 ? T.success : p.healthScore >= 70 ? T.warning : T.error} />
-                  </div>
-                  <button 
-                    onClick={() => alert(`Redirecting to Repository Management for project "${p.name}"`)}
-                    style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "6px 10px", color: T.dim, cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center" }}
-                  >
-                    Open
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* --- PROJECT GRID & CARD HANDLERS --- */}
-      <section style={{ marginBottom: 40 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 650, color: T.text, letterSpacing: "-0.015em" }}>
-            Workspace Projects ({simulateLoading ? "..." : filteredProjects.length})
-          </h2>
-        </div>
-
-        {simulateLoading ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-            {Array.from({ length: 6 }).map((_, idx) => (
-              <div key={idx} className="dash-skeleton" style={{ height: 210, borderRadius: T.r8 }} />
-            ))}
-          </div>
-        ) : simulateEmpty ? (
-          /* --- EMPTY ONBOARDING STATE --- */
-          <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r12, padding: "48px 24px", textAlign: "center" }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>📁</div>
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: T.text, marginBottom: 8 }}>No active projects found</h3>
-            <p style={{ fontSize: 13, color: T.dim, maxWidth: 520, margin: "0 auto 24px" }}>
-              Workspaces are empty directories until you register a project wrapper. Get started by organizing your repositories and setting up automatic indexing schedules.
-            </p>
-            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-              <DashButton variant="primary" onClick={() => { setIsModalOpen(true); setModalStep("form"); }}>
-                + Create New Project
-              </DashButton>
-              <DashButton onClick={() => alert("Redirecting to help documentation...")}>
-                Read Onboarding Guide
-              </DashButton>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
-            {filteredProjects.map(proj => (
-              <article 
-                key={proj.id} 
-                className="dash-card"
-                style={{
-                  background: T.surface,
-                  border: `1px solid ${T.border}`,
-                  borderRadius: T.r8,
-                  padding: 18,
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  minHeight: 240,
-                  position: "relative"
-                }}
-              >
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+          {filteredProjects.map((p) => (
+            <div key={p.id} className="project-card" style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 20, display: "flex", flexDirection: "column", gap: 16, cursor: "pointer", transition: "all 0.2s ease" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
-                  {/* Top line: Icon, name, favorite */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 24, padding: "4px 8px", background: T.surfaceEl, borderRadius: T.r6 }}>{proj.icon}</span>
-                      <div>
-                        <h3 style={{ fontSize: 15, fontWeight: 650, color: T.text, letterSpacing: "-0.01em" }}>{proj.name}</h3>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                          <span style={{ fontSize: 10, color: T.faint }}>by {proj.owner}</span>
-                          <span style={{ width: 3, height: 3, borderRadius: "50%", background: T.faint }} />
-                          <span style={{ fontSize: 10, color: T.faint }}>{proj.visibility}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 4 }}>
-                      {/* Favorite button */}
-                      <button 
-                        onClick={() => handleToggleFavorite(proj.id)}
-                        style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: proj.favorite ? T.warning : T.faint }}
-                        aria-label="Add to favorites"
-                      >
-                        {proj.favorite ? "★" : "☆"}
-                      </button>
-
-                      {/* Dropdown Menu Trigger */}
-                      <button 
-                        onClick={() => setActiveMenuId(activeMenuId === proj.id ? null : proj.id)}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: T.faint }}
-                        aria-label="Actions menu"
-                      >
-                        ⋮
-                      </button>
-
-                      {/* Action Dropdown Menu */}
-                      {activeMenuId === proj.id && (
-                        <div 
-                          ref={menuRef}
-                          style={{ position: "absolute", right: 18, top: 50, background: T.surfaceEl, border: `1px solid ${T.borderMid}`, borderRadius: T.r6, padding: 6, width: 140, boxShadow: T.shadowLg, zIndex: 50 }}
-                        >
-                          <button onClick={() => alert(`Redirecting to Repository Management for project "${proj.name}"`)} style={{ width: "100%", padding: "6px 8px", background: "none", border: "none", color: T.dim, textAlign: "left", fontSize: 12, cursor: "pointer", borderRadius: T.r4 }} onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov} onMouseLeave={e => e.currentTarget.style.background = "none"}>Open</button>
-                          <button onClick={() => { const name = prompt("Rename project to:", proj.name); if (name) setProjects(prev => prev.map(p => p.id === proj.id ? { ...p, name } : p)); setActiveMenuId(null); }} style={{ width: "100%", padding: "6px 8px", background: "none", border: "none", color: T.dim, textAlign: "left", fontSize: 12, cursor: "pointer", borderRadius: T.r4 }} onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov} onMouseLeave={e => e.currentTarget.style.background = "none"}>Rename</button>
-                          <button onClick={() => handleDuplicateProject(proj)} style={{ width: "100%", padding: "6px 8px", background: "none", border: "none", color: T.dim, textAlign: "left", fontSize: 12, cursor: "pointer", borderRadius: T.r4 }} onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov} onMouseLeave={e => e.currentTarget.style.background = "none"}>Duplicate</button>
-                          <button onClick={() => { alert("Project archived successfully."); setActiveMenuId(null); }} style={{ width: "100%", padding: "6px 8px", background: "none", border: "none", color: T.dim, textAlign: "left", fontSize: 12, cursor: "pointer", borderRadius: T.r4 }} onMouseEnter={e => e.currentTarget.style.background = T.surfaceHov} onMouseLeave={e => e.currentTarget.style.background = "none"}>Archive</button>
-                          <div style={{ height: 1, background: T.border, margin: "4px 0" }} />
-                          <button onClick={() => handleDeleteProject(proj.id)} style={{ width: "100%", padding: "6px 8px", background: "none", border: "none", color: T.error, textAlign: "left", fontSize: 12, cursor: "pointer", borderRadius: T.r4 }} onMouseEnter={e => e.currentTarget.style.background = "rgba(248,81,73,0.08)"} onMouseLeave={e => e.currentTarget.style.background = "none"}>Delete</button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <p style={{ fontSize: 12, color: T.dim, lineHeight: "1.4", margin: "10px 0 16px", minHeight: 34 }}>
-                    {proj.description}
-                  </p>
-                </div>
-
-                {/* Health Rating and Repo Count line */}
-                <div>
-                  {/* Repository Spark Health Dots */}
-                  {proj.repoHealths && proj.repoHealths.length > 0 && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, background: T.surfaceEl, padding: "6px 10px", borderRadius: T.r6, border: `1px solid ${T.border}` }}>
-                      <span style={{ fontSize: 10, color: T.faint, fontWeight: 500 }}>REPOS HEALTH:</span>
-                      <div style={{ display: "flex", gap: 5 }}>
-                        {proj.repoHealths.map((h, i) => (
-                          <span 
-                            key={i} 
-                            title={`Sub-repository health score: ${h}%`}
-                            style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: "50%",
-                              background: h >= 85 ? T.success : h >= 70 ? T.warning : T.error,
-                              display: "inline-block"
-                            }} 
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 11, color: T.faint }}>Repos:</span>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: T.text, fontFamily: T.mono }}>{proj.repositoryCount}</span>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 11, color: T.faint }}>Health:</span>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: proj.healthScore >= 85 ? T.success : proj.healthScore >= 70 ? T.warning : T.error, fontFamily: T.mono }}>
-                        {proj.healthScore}%
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: 14 }}>
-                    <ProgressBar value={proj.healthScore} color={proj.healthScore >= 85 ? T.success : proj.healthScore >= 70 ? T.warning : T.error} />
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${T.border}`, paddingTop: 10 }}>
-                    <span style={{ fontSize: 11, color: T.faint }}>Analyzed: {proj.lastAnalysis}</span>
-                    <button 
-                      onClick={() => alert(`Redirecting to Repository Management for project "${proj.name}"`)}
-                      style={{
-                        background: T.accentSoft,
-                        border: `1px solid ${T.accentBorder}`,
-                        borderRadius: T.r6,
-                        padding: "6px 12px",
-                        color: T.accentBright,
-                        fontSize: 11,
-                        fontWeight: 500,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4
-                      }}
-                    >
-                      Open Project ➔
-                    </button>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 4 }}>{p.name}</div>
+                  <div style={{ fontSize: 12, color: T.dim, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: p.health > 80 ? T.success : p.health > 50 ? T.warning : T.error }}>● {p.status}</span>
                   </div>
                 </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* --- QUICK SHORTCUT ACTIONS BAR --- */}
-      {!simulateError && (
-        <section style={{ borderTop: `1px solid ${T.border}`, paddingTop: 32 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 650, color: T.text, marginBottom: 14, letterSpacing: "-0.01em" }}>Quick Start Actions</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-            {[
-              { title: "Create Project wrapper", desc: "Define workspace and set access credentials.", icon: "📁", action: () => { setIsModalOpen(true); setModalStep("form"); } },
-              { title: "Upload local Repository", desc: "Initialize source folder analysis directly.", icon: "📤", action: () => alert("Initiating repository loader simulator...") },
-              { title: "Connect GitHub/GitLab", desc: "Authorize connection tokens for repositories.", icon: "🐙", action: () => alert("Connecting git integrations...") },
-              { title: "Open Documentation docs", desc: "View schema reference manuals and graph models.", icon: "📚", action: () => alert("Opening knowledge docs...") }
-            ].map(qa => (
-              <div 
-                key={qa.title}
-                onClick={qa.action}
-                className="dash-card"
-                style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 16, cursor: "pointer", display: "flex", gap: 12, alignItems: "flex-start" }}
-              >
-                <span style={{ fontSize: 24, padding: 6, background: T.surfaceEl, borderRadius: T.r6 }}>{qa.icon}</span>
-                <div>
-                  <h3 style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 4 }}>{qa.title}</h3>
-                  <p style={{ fontSize: 11, color: T.dim, lineHeight: "1.3" }}>{qa.desc}</p>
+                <button style={{ background: "none", border: "none", color: T.faint, cursor: "pointer", padding: 4 }}><Icons.moreH size={16}/></button>
+              </div>
+              
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 8 }}>
+                <div style={{ background: T.surfaceEl, padding: "8px 12px", borderRadius: T.r6 }}>
+                  <div style={{ fontSize: 11, color: T.dim, marginBottom: 4 }}>Repositories</div>
+                  <div style={{ fontSize: 16, fontFamily: T.mono, color: T.text }}>{p.repos}</div>
+                </div>
+                <div style={{ background: T.surfaceEl, padding: "8px 12px", borderRadius: T.r6 }}>
+                  <div style={{ fontSize: 11, color: T.dim, marginBottom: 4 }}>Health Score</div>
+                  <div style={{ fontSize: 16, fontFamily: T.mono, color: p.health > 80 ? T.success : p.health > 50 ? T.warning : T.error }}>{p.health}</div>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* --- CREATE PROJECT MODAL --- */}
-      {isModalOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, animation: "fadeIn 0.15s ease" }}>
-          <div 
-            style={{ background: T.surface, border: `1px solid ${T.borderMid}`, borderRadius: T.r12, width: "100%", maxWidth: 480, padding: 28, boxShadow: T.shadowLg, position: "relative" }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 650, color: T.text }}>Create Workspace Project</h3>
-              {modalStep !== "loading" && (
-                <button 
-                  onClick={resetForm}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: T.faint }}
-                >
-                  ✕
-                </button>
-              )}
             </div>
-
-            {/* --- STEP 1: FORM CONTROLS --- */}
-            {modalStep === "form" && (
-              <form onSubmit={handleCreateProjectSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <label style={{ fontSize: 11, color: T.dim, fontWeight: 500 }}>Project Name *</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. core-ledger-microservice"
-                    value={formName}
-                    onChange={e => setFormName(e.target.value)}
-                    style={{ background: T.bg, border: `1px solid ${formErrors.name ? T.error : T.borderMid}`, borderRadius: T.r6, color: T.text, padding: "8px 12px", fontSize: 13, outline: "none" }}
-                  />
-                  {formErrors.name && <span style={{ color: T.error, fontSize: 11 }}>{formErrors.name}</span>}
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <label style={{ fontSize: 11, color: T.dim, fontWeight: 500 }}>Description</label>
-                  <textarea 
-                    rows="3"
-                    placeholder="Describe this project container..."
-                    value={formDesc}
-                    onChange={e => setFormDesc(e.target.value)}
-                    style={{ background: T.bg, border: `1px solid ${T.borderMid}`, borderRadius: T.r6, color: T.text, padding: "8px 12px", fontSize: 13, outline: "none", resize: "none" }}
-                  />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <label style={{ fontSize: 11, color: T.dim, fontWeight: 500 }}>Visual Icon</label>
-                    <select 
-                      value={formIcon}
-                      onChange={e => setFormIcon(e.target.value)}
-                      style={{ background: T.bg, border: `1px solid ${T.borderMid}`, borderRadius: T.r6, color: T.text, padding: "8px 10px", fontSize: 13, outline: "none", cursor: "pointer" }}
-                    >
-                      <option value="🌐">🌐 Global</option>
-                      <option value="🔒">🔒 Secure</option>
-                      <option value="🧠">🧠 Neural</option>
-                      <option value="📊">📊 Graph</option>
-                      <option value="⚡">⚡ Speed</option>
-                      <option value="🏠">🏠 Base</option>
-                    </select>
-                  </div>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <label style={{ fontSize: 11, color: T.dim, fontWeight: 500 }}>Visibility Mode</label>
-                    <select 
-                      value={formVisibility}
-                      onChange={e => setFormVisibility(e.target.value)}
-                      style={{ background: T.bg, border: `1px solid ${T.borderMid}`, borderRadius: T.r6, color: T.text, padding: "8px 10px", fontSize: 13, outline: "none", cursor: "pointer" }}
-                    >
-                      <option value="Private">Private</option>
-                      <option value="Internal">Internal</option>
-                      <option value="Public">Public</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
-                  <button 
-                    type="button" 
-                    onClick={resetForm}
-                    style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.dim, fontSize: 12, padding: "8px 16px", cursor: "pointer" }}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit" 
-                    style={{ background: T.accent, border: "none", borderRadius: T.r6, color: "#fff", fontSize: 12, fontWeight: 500, padding: "8px 16px", cursor: "pointer" }}
-                  >
-                    Create Project
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* --- STEP 2: LOADING --- */}
-            {modalStep === "loading" && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "30px 0" }}>
-                <span style={{ width: 32, height: 32, border: "3px solid rgba(255,255,255,0.1)", borderTopColor: T.accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                <div>
-                  <h4 style={{ fontSize: 14, fontWeight: 600, color: T.text, textAlign: "center", marginBottom: 4 }}>Creating Project Directory</h4>
-                  <p style={{ fontSize: 11, color: T.faint, textAlign: "center" }}>Allocating workspace schemas and mapping indices...</p>
-                </div>
-              </div>
-            )}
-
-            {/* --- STEP 3: SUCCESS --- */}
-            {modalStep === "success" && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "20px 0" }}>
-                <div style={{ width: 44, height: 44, borderRadius: "50%", background: `${T.success}1c`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ color: T.success, fontSize: 20 }}>✓</span>
-                </div>
-                <div style={{ textAlign: "center" }}>
-                  <h4 style={{ fontSize: 14, fontWeight: 650, color: T.text, marginBottom: 4 }}>Project Created Successfully</h4>
-                  <p style={{ fontSize: 12, color: T.dim }}>
-                    The container wrapper has been registered. You can now begin loading source code repositories.
-                  </p>
-                </div>
-                <button 
-                  onClick={resetForm}
-                  style={{ background: T.accent, border: "none", borderRadius: T.r6, color: "#fff", fontSize: 12, padding: "8px 24px", cursor: "pointer", fontWeight: 500 }}
-                >
-                  Go to Directory
-                </button>
-              </div>
-            )}
-
-          </div>
+          ))}
         </div>
       )}
-
     </div>
   );
 }
@@ -3968,17 +3029,22 @@ function RepoAnalysisPage({ setActivePage }) {
   const warnings = [
     { type: "Large File", message: "DataGrid.tsx exceeds 100 lines of code (112 LOC). Consider modularizing.", level: "warning" },
     { type: "Deep Nesting", message: "Folder depth at oauth-provider exceeds 5 levels. Best practice is < 4.", level: "info" },
-    { type: "Too Many Imports", message: "useAuth.ts imports 18 external modules. May indicate tight coupling.", level: "info" }
+    { type: "Too Many Imports", message: "useAuth.ts imports 18 external modules. May indicate tight coupling.", level: "info" },
+    { type: "Very Large Classes", message: "DataGrid class contains 14 methods and 6 properties. Refactoring recommended.", level: "warning" },
+    { type: "Large Functions", message: "renderGrid() is 112 lines long with high cyclomatic complexity.", level: "warning" }
   ];
 
   // Filtering lists
   const filteredFunctions = rawFunctions.filter(f => {
     const matchesSearch = f.name.toLowerCase().includes(searchTerm.toLowerCase()) || f.file.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    const matchesLang = selectedLanguage === "All" || (selectedLanguage === "TypeScript" && f.file.endsWith('.ts')) || (selectedLanguage === "React" && f.file.endsWith('.tsx'));
+    return matchesSearch && matchesLang;
   }).sort((a, b) => b[sortFuncField] - a[sortFuncField]);
 
   const filteredClasses = rawClasses.filter(c => {
-    return c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.file.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.file.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesLang = selectedLanguage === "All" || (selectedLanguage === "TypeScript" && c.file.endsWith('.ts')) || (selectedLanguage === "React" && c.file.endsWith('.tsx'));
+    return matchesSearch && matchesLang;
   }).sort((a, b) => b[sortClassField] - a[sortClassField]);
 
   if (status === "loading") {
@@ -4243,6 +3309,555 @@ function RepoAnalysisPage({ setActivePage }) {
 }
 
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PROMPT 9: KNOWLEDGE GRAPH EXPLORER (FULL COMPLIANCE)
+═══════════════════════════════════════════════════════════════════════════ */
+
+const graphMockData = {
+  nodes: [
+    { id: "root", type: "custom", position: { x: 400, y: 50 }, data: { label: "frontend-platform", type: "Repository", lang: "Mixed", visibility: "Public", path: "/" } },
+    { id: "src", type: "custom", position: { x: 400, y: 150 }, data: { label: "src", type: "Folder", lang: "Mixed", visibility: "Public", path: "/src", parent: "root" } },
+    { id: "components", type: "custom", position: { x: 200, y: 250 }, data: { label: "components", type: "Folder", lang: "Mixed", visibility: "Public", path: "/src/components", parent: "src" } },
+    { id: "utils", type: "custom", position: { x: 600, y: 250 }, data: { label: "utils", type: "Folder", lang: "Mixed", visibility: "Public", path: "/src/utils", parent: "src" } },
+    { id: "Button", type: "custom", position: { x: 100, y: 350 }, data: { label: "Button.tsx", type: "File", lang: "React", visibility: "Public", path: "/src/components/Button.tsx", parent: "components" } },
+    { id: "DataGrid", type: "custom", position: { x: 300, y: 350 }, data: { label: "DataGrid.tsx", type: "File", lang: "React", visibility: "Public", path: "/src/components/DataGrid.tsx", parent: "components" } },
+    { id: "formatters", type: "custom", position: { x: 600, y: 350 }, data: { label: "formatters.ts", type: "File", lang: "TypeScript", visibility: "Public", path: "/src/utils/formatters.ts", parent: "utils" } },
+    { id: "authModule", type: "custom", position: { x: 800, y: 250 }, data: { label: "auth-module", type: "Module", lang: "TypeScript", visibility: "Public", path: "/src/auth", parent: "src" } },
+    { id: "useAuth", type: "custom", position: { x: 800, y: 350 }, data: { label: "useAuth", type: "Function", lang: "TypeScript", visibility: "Public", path: "/src/auth/useAuth.ts", parent: "authModule" } },
+    { id: "AuthService", type: "custom", position: { x: 800, y: 450 }, data: { label: "AuthService", type: "Class", lang: "TypeScript", visibility: "Public", path: "/src/auth/AuthService.ts", parent: "authModule" } },
+    { id: "IUser", type: "custom", position: { x: 950, y: 450 }, data: { label: "IUser", type: "Interface", lang: "TypeScript", visibility: "Public", path: "/src/auth/IUser.ts", parent: "authModule" } },
+    { id: "formatDate", type: "custom", position: { x: 600, y: 450 }, data: { label: "formatDate", type: "Function", lang: "TypeScript", visibility: "Private", path: "/src/utils/formatters.ts", parent: "formatters" } },
+    { id: "GridClass", type: "custom", position: { x: 300, y: 450 }, data: { label: "DataGrid", type: "Class", lang: "React", visibility: "Public", path: "/src/components/DataGrid.tsx", parent: "DataGrid" } },
+    { id: "UsersTable", type: "custom", position: { x: 100, y: 550 }, data: { label: "UsersTable", type: "Database Table", lang: "SQL", visibility: "Private", path: "db:users", parent: "none" } },
+    { id: "AuthAPI", type: "custom", position: { x: 800, y: 550 }, data: { label: "/api/v1/auth", type: "API Endpoint", lang: "HTTP", visibility: "Public", path: "api:auth", parent: "none" } },
+    { id: "PaymentPkg", type: "custom", position: { x: 1000, y: 150 }, data: { label: "@org/payments", type: "Package", lang: "TypeScript", visibility: "Public", path: "node_modules/@org/payments", parent: "none" } },
+    { id: "BillingSvc", type: "custom", position: { x: 1000, y: 250 }, data: { label: "BillingService", type: "Service", lang: "Go", visibility: "Public", path: "cluster:billing", parent: "none" } },
+  ],
+  edges: [
+    { id: "e1", source: "root", target: "src", label: "contains" },
+    { id: "e2", source: "src", target: "components", label: "contains" },
+    { id: "e3", source: "src", target: "utils", label: "contains" },
+    { id: "e4", source: "src", target: "authModule", label: "contains" },
+    { id: "e5", source: "components", target: "Button", label: "contains" },
+    { id: "e6", source: "components", target: "DataGrid", label: "contains" },
+    { id: "e7", source: "utils", target: "formatters", label: "contains" },
+    { id: "e8", source: "authModule", target: "useAuth", label: "defines" },
+    { id: "e9", source: "useAuth", target: "AuthService", label: "uses" },
+    { id: "e10", source: "formatters", target: "formatDate", label: "defines" },
+    { id: "e11", source: "DataGrid", target: "GridClass", label: "defines" },
+    { id: "e12", source: "GridClass", target: "formatDate", label: "imports" },
+    { id: "e13", source: "AuthService", target: "UsersTable", label: "depends on" },
+    { id: "e14", source: "AuthService", target: "AuthAPI", label: "calls" },
+    { id: "e15", source: "AuthService", target: "IUser", label: "implements" },
+    { id: "e16", source: "BillingSvc", target: "PaymentPkg", label: "exports" },
+    { id: "e17", source: "useAuth", target: "PaymentPkg", label: "references" },
+    { id: "e18", source: "AuthAPI", target: "BillingSvc", label: "extends" },
+  ]
+};
+
+// Edge styling helper
+const getEdgeStyle = (label, selectedNodeId, source, target) => {
+  let color = T.dim;
+  let strokeDasharray = "0";
+  let animated = false;
+
+  if (label === "imports") { color = T.warning; strokeDasharray = "5 5"; }
+  if (label === "calls") { color = T.info; animated = true; }
+  if (label === "depends on") { color = T.error; strokeDasharray = "2 4"; }
+  if (label === "implements") { color = T.success; strokeDasharray = "4 2"; }
+  if (label === "uses") { color = T.accentBright; animated = true; }
+  if (label === "exports") { color = "#a371f7"; }
+  if (label === "references") { color = "#f771a3"; strokeDasharray = "2 2"; }
+  if (label === "extends") { color = "#71f7a3"; strokeDasharray = "6 2"; }
+
+  // Edge highlighting logic
+  let opacity = 1;
+  if (selectedNodeId) {
+    if (source !== selectedNodeId && target !== selectedNodeId) {
+      opacity = 0.15; // Dim edges not connected to selected node
+    } else {
+      color = T.text; // Highlight connected edges brightly
+    }
+  }
+
+  return { style: { stroke: color, strokeDasharray, opacity }, animated };
+};
+
+const CustomGraphNode = ({ data, selected }) => {
+  let bgColor = T.surfaceEl;
+  let borderColor = T.border;
+  let icon = Icons.file;
+  
+  if (data.type === "Repository") { borderColor = T.accent; icon = Icons.repos; }
+  if (data.type === "Folder") { icon = Icons.archive; }
+  if (data.type === "Module") { borderColor = T.info; icon = Icons.gridView; }
+  if (data.type === "Class") { bgColor = "#1e1e24"; borderColor = T.warning; }
+  if (data.type === "Function") { bgColor = "#1a221d"; borderColor = T.success; }
+  if (data.type === "Database Table") { bgColor = "#2d1b1b"; borderColor = T.error; }
+  if (data.type === "API Endpoint") { bgColor = "#1b2533"; borderColor = T.info; }
+  if (data.type === "Package") { bgColor = "#261a29"; borderColor = "#a371f7"; icon = Icons.archive; }
+  if (data.type === "Interface") { bgColor = "#1a2624"; borderColor = "#71f7a3"; icon = Icons.file; }
+  if (data.type === "Service") { bgColor = "#2a1a1a"; borderColor = "#f771a3"; icon = Icons.arch; }
+
+  return (
+    <div 
+      aria-label={`${data.type} node: ${data.label}`}
+      style={{
+      padding: "8px 12px",
+      background: bgColor,
+      border: `1px solid ${selected ? T.text : borderColor}`,
+      borderRadius: T.r6,
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      minWidth: 120,
+      boxShadow: selected ? `0 0 0 2px ${T.accentSoft}` : T.shadow,
+      transition: "all 0.2s ease",
+      opacity: data.hidden ? 0.2 : 1
+    }}>
+      <Handle type="target" position={Position.Top} style={{ background: T.faint, border: "none", width: 8, height: 8 }} />
+      <div style={{ color: selected ? T.text : T.faint }}>
+        <icon.type {...icon.props} size={14} />
+      </div>
+      <div>
+        {!data.hideLabel && <div style={{ fontSize: 12, fontWeight: 500, color: T.text, fontFamily: T.mono }}>{data.label}</div>}
+        <div style={{ fontSize: 10, color: T.faint }}>{data.type}</div>
+      </div>
+      <Handle type="source" position={Position.Bottom} style={{ background: T.faint, border: "none", width: 8, height: 8 }} />
+    </div>
+  );
+};
+
+const nodeTypes = { custom: CustomGraphNode };
+
+function KnowledgeGraphPage({ setActivePage }) {
+  const [status, setStatus] = useState("success");
+  return (
+    <ReactFlowProvider>
+      <KnowledgeGraphInner status={status} setStatus={setStatus} />
+    </ReactFlowProvider>
+  );
+}
+
+function KnowledgeGraphInner({ status, setStatus }) {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  
+  // Filters & Controls
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterType, setFilterType] = useState("All");
+  const [filterLang, setFilterLang] = useState("All");
+  const [filterRel, setFilterRel] = useState("All");
+  const [filterVis, setFilterVis] = useState("All");
+  const [showLabels, setShowLabels] = useState(true);
+  
+  const { fitView } = useReactFlow();
+
+  // Initialize and apply filters dynamically
+  useEffect(() => {
+    const filteredNodes = graphMockData.nodes.map(node => {
+      const matchSearch = node.data.label.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchType = filterType === "All" || node.data.type === filterType;
+      const matchLang = filterLang === "All" || node.data.lang === filterLang;
+      const matchVis = filterVis === "All" || node.data.visibility === filterVis;
+      const isVisible = matchSearch && matchType && matchLang && matchVis;
+      
+      return {
+        ...node,
+        data: { ...node.data, hidden: !isVisible, hideLabel: !showLabels }
+      };
+    });
+
+    const filteredEdges = graphMockData.edges.map(edge => {
+      const matchRel = filterRel === "All" || edge.label === filterRel;
+      
+      const sourceVisible = filteredNodes.find(n => n.id === edge.source && !n.data.hidden);
+      const targetVisible = filteredNodes.find(n => n.id === edge.target && !n.data.hidden);
+      const isVisible = matchRel && sourceVisible && targetVisible;
+
+      const edgeStyleProps = getEdgeStyle(edge.label, selectedNodeId, edge.source, edge.target);
+
+      return {
+        ...edge,
+        type: "smoothstep",
+        hidden: !isVisible,
+        ...edgeStyleProps
+      };
+    });
+
+    setNodes(filteredNodes);
+    setEdges(filteredEdges);
+  }, [searchTerm, filterType, filterLang, filterRel, filterVis, showLabels, selectedNodeId, setNodes, setEdges]);
+
+  // Hook to refit view when filters change heavily (optional, but good UX)
+  useEffect(() => {
+    setTimeout(() => fitView({ duration: 800, padding: 0.2 }), 50);
+  }, [searchTerm, filterType, filterLang, showLabels, fitView]);
+
+  const onNodeClick = (_, node) => setSelectedNodeId(node.id);
+  const onPaneClick = () => setSelectedNodeId(null);
+
+  const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
+
+  if (status === "loading") return <GraphLoadingState />;
+  if (status === "empty") return <GraphEmptyState onRun={() => setStatus("running")} />;
+  if (status === "error") return <GraphErrorState onRetry={() => setStatus("success")} />;
+  if (status === "failed") return <GraphFailedState />;
+  if (status === "running") return <GraphRunningState />;
+
+  return (
+    <div style={{ display: "flex", height: "100%", flexDirection: "column" }}>
+      {/* Dev Switcher */}
+      <div style={{ padding: "8px 16px", background: T.surface, borderBottom: `1px solid ${T.border}`, display: "flex", gap: 8, overflowX: "auto" }}>
+        <span style={{ fontSize: 11, color: T.faint, alignSelf: "center", marginRight: 8, fontFamily: T.mono }}>DEV STATE:</span>
+        {["loading", "running", "failed", "empty", "error", "success"].map(s => (
+          <button key={s} aria-label={`Switch to ${s} state`} onClick={() => setStatus(s)} style={{ padding: "4px 8px", background: status === s ? T.accent : T.surfaceEl, color: status === s ? "#fff" : T.dim, border: `1px solid ${status === s ? T.accent : T.border}`, borderRadius: T.r4, fontSize: 11, cursor: "pointer" }}>
+            {s}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        {/* Left Sidebar */}
+        <div style={{ width: 260, borderRight: `1px solid ${T.border}`, background: T.surface, display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: 16, borderBottom: `1px solid ${T.border}`, display: "flex", flexDirection: "column", gap: 12 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 500, color: T.text }}>Graph Filters</h3>
+            
+            <div style={{ position: "relative" }}>
+              <div style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></div>
+              <input 
+                aria-label="Search nodes"
+                type="text" 
+                placeholder="Search nodes..." 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                style={{ width: "100%", padding: "6px 12px 6px 30px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, fontSize: 13, outline: "none" }}
+              />
+            </div>
+            
+            <div>
+              <div style={{ marginBottom: 4, fontSize: 11, color: T.dim }}>Node Type</div>
+              <select aria-label="Filter by Node Type" value={filterType} onChange={e => setFilterType(e.target.value)} style={{ width: "100%", padding: "6px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.text, fontSize: 12, outline: "none" }}>
+                <option value="All">All Types</option>
+                <option value="Repository">Repository</option>
+                <option value="Folder">Folder</option>
+                <option value="File">File</option>
+                <option value="Module">Module</option>
+                <option value="Package">Package</option>
+                <option value="Class">Class</option>
+                <option value="Function">Function</option>
+                <option value="Interface">Interface</option>
+                <option value="Database Table">Database Table</option>
+                <option value="API Endpoint">API Endpoint</option>
+                <option value="Service">Service</option>
+              </select>
+            </div>
+
+            <div>
+              <div style={{ marginBottom: 4, fontSize: 11, color: T.dim }}>Language</div>
+              <select aria-label="Filter by Language" value={filterLang} onChange={e => setFilterLang(e.target.value)} style={{ width: "100%", padding: "6px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.text, fontSize: 12, outline: "none" }}>
+                <option value="All">All Languages</option>
+                <option value="TypeScript">TypeScript</option>
+                <option value="React">React</option>
+                <option value="SQL">SQL</option>
+                <option value="HTTP">HTTP</option>
+                <option value="Go">Go</option>
+                <option value="Mixed">Mixed</option>
+              </select>
+            </div>
+
+            <div>
+              <div style={{ marginBottom: 4, fontSize: 11, color: T.dim }}>Relationship Type</div>
+              <select aria-label="Filter by Relationship Type" value={filterRel} onChange={e => setFilterRel(e.target.value)} style={{ width: "100%", padding: "6px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.text, fontSize: 12, outline: "none" }}>
+                <option value="All">All Relationships</option>
+                <option value="contains">Contains</option>
+                <option value="imports">Imports</option>
+                <option value="calls">Calls</option>
+                <option value="defines">Defines</option>
+                <option value="extends">Extends</option>
+                <option value="implements">Implements</option>
+                <option value="uses">Uses</option>
+                <option value="depends on">Depends On</option>
+                <option value="exports">Exports</option>
+                <option value="references">References</option>
+              </select>
+            </div>
+
+            <div>
+              <div style={{ marginBottom: 4, fontSize: 11, color: T.dim }}>Visibility</div>
+              <select aria-label="Filter by Visibility" value={filterVis} onChange={e => setFilterVis(e.target.value)} style={{ width: "100%", padding: "6px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.text, fontSize: 12, outline: "none" }}>
+                <option value="All">All Visibility</option>
+                <option value="Public">Public</option>
+                <option value="Private">Private</option>
+              </select>
+            </div>
+
+          </div>
+
+          <div style={{ padding: 16, flex: 1, overflowY: "auto" }}>
+            <h3 style={{ fontSize: 12, fontWeight: 500, color: T.dim, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Legend</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <LegendItem label="Repository" color={T.accent} />
+              <LegendItem label="Folder / File" color={T.border} />
+              <LegendItem label="Module / API" color={T.info} />
+              <LegendItem label="Class" color={T.warning} />
+              <LegendItem label="Function" color={T.success} />
+              <LegendItem label="Database" color={T.error} />
+              <LegendItem label="Package" color="#a371f7" />
+              <LegendItem label="Interface" color="#71f7a3" />
+              <LegendItem label="Service" color="#f771a3" />
+            </div>
+            
+            <h3 style={{ fontSize: 12, fontWeight: 500, color: T.dim, marginTop: 24, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Edges</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <LegendEdge label="contains / defines" color={T.dim} type="solid" />
+              <LegendEdge label="imports" color={T.warning} type="dashed" />
+              <LegendEdge label="calls" color={T.info} type="solid" />
+              <LegendEdge label="depends on" color={T.error} type="dashed" />
+              <LegendEdge label="uses" color={T.accentBright} type="solid" />
+              <LegendEdge label="exports" color="#a371f7" type="solid" />
+              <LegendEdge label="implements" color={T.success} type="dashed" />
+              <LegendEdge label="extends" color="#71f7a3" type="dashed" />
+              <LegendEdge label="references" color="#f771a3" type="dashed" />
+            </div>
+          </div>
+        </div>
+
+        {/* Center Canvas */}
+        <div style={{ flex: 1, position: "relative", background: T.bg }}>
+          {/* Graph Toolbar Overlay */}
+          <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, display: "flex", gap: 8, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "6px 8px", boxShadow: T.shadow }}>
+            <button aria-label="Toggle Labels" onClick={() => setShowLabels(!showLabels)} style={{ padding: "4px 8px", background: "none", color: showLabels ? T.text : T.dim, border: "none", cursor: "pointer", fontSize: 12 }}>
+              {showLabels ? "Hide Labels" : "Show Labels"}
+            </button>
+            <div style={{ width: 1, background: T.border }}></div>
+            <button aria-label="Reset Graph" onClick={() => { setSearchTerm(""); setFilterType("All"); setFilterLang("All"); setFilterRel("All"); setFilterVis("All"); setSelectedNodeId(null); }} style={{ padding: "4px 8px", background: "none", color: T.text, border: "none", cursor: "pointer", fontSize: 12 }}>
+              Reset Graph
+            </button>
+            <div style={{ width: 1, background: T.border }}></div>
+            <button aria-label="Center Graph" onClick={() => fitView({ duration: 800, padding: 0.2 })} style={{ padding: "4px 8px", background: "none", color: T.text, border: "none", cursor: "pointer", fontSize: 12 }} title="Refocus the graph">
+              Center (Fit View)
+            </button>
+            <div style={{ width: 1, background: T.border }}></div>
+            <button aria-label="Export Image" onClick={() => alert("Exporting image placeholder")} style={{ padding: "4px 8px", background: "none", color: T.text, border: "none", cursor: "pointer", fontSize: 12 }}>
+              Export SVG
+            </button>
+          </div>
+
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
+            nodeTypes={nodeTypes}
+            fitView
+            attributionPosition="bottom-right"
+            theme="dark"
+          >
+            <Background color={T.border} gap={20} size={1} />
+            <Controls style={{ display: 'flex', flexDirection: 'column', backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, overflow: 'hidden' }} />
+            <MiniMap 
+              nodeColor={n => {
+                if(n.data.type==='Class') return T.warning;
+                if(n.data.type==='Function') return T.success;
+                if(n.data.type==='Package') return "#a371f7";
+                return T.surfaceEl;
+              }}
+              style={{ backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6 }}
+              maskColor="rgba(0,0,0,0.5)"
+            />
+          </ReactFlow>
+        </div>
+
+        {/* Right Sidebar */}
+        <div style={{ width: 300, borderLeft: `1px solid ${T.border}`, background: T.surface, display: "flex", flexDirection: "column", overflowY: "auto" }}>
+          {selectedNode ? (
+            <div style={{ padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <div style={{ width: 32, height: 32, borderRadius: T.r6, background: T.surfaceEl, display: "flex", alignItems: "center", justifyContent: "center", color: T.text }}>
+                  <Icons.file size={16} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: T.text, fontFamily: T.mono }}>{selectedNode.data.label}</div>
+                  <div style={{ fontSize: 11, color: T.dim }}>{selectedNode.data.type} &middot; {selectedNode.data.lang}</div>
+                </div>
+              </div>
+              
+              <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+                <DashButton icon={Icons.search} label="Open File" variant="secondary" onClick={() => {}} style={{ flex: 1 }} />
+                <DashButton icon={Icons.arch} label="Analysis" variant="secondary" onClick={() => {}} style={{ flex: 1 }} />
+              </div>
+
+              <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>Metadata</div>
+              <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 12, marginBottom: 24, fontSize: 12, color: T.text }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ color: T.faint }}>Path</span>
+                  <span style={{ fontFamily: T.mono, color: T.dim }}>{selectedNode.data.path}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ color: T.faint }}>Visibility</span>
+                  <span style={{ color: selectedNode.data.visibility === 'Public' ? T.success : T.warning }}>{selectedNode.data.visibility}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: T.faint }}>Parent</span>
+                  <span style={{ fontFamily: T.mono, color: T.dim }}>{selectedNode.data.parent || 'none'}</span>
+                </div>
+              </div>
+
+              {/* Children Nodes (if any) */}
+              {(() => {
+                const children = graphMockData.nodes.filter(n => n.data.parent === selectedNode.id);
+                if (children.length === 0) return null;
+                return (
+                  <>
+                    <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>Children ({children.length})</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 24 }}>
+                      {children.map(c => (
+                        <div key={c.id} style={{ fontSize: 12, fontFamily: T.mono, color: T.text, padding: "4px 8px", background: T.surfaceEl, borderRadius: T.r4 }}>
+                          {c.data.label} <span style={{color: T.faint, fontSize: 10}}>({c.data.type})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+
+              <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>Incoming Relationships</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+                {edges.filter(e => e.target === selectedNode.id).map(e => {
+                  const otherNode = nodes.find(n => n.id === e.source);
+                  if(!otherNode) return null;
+                  return (
+                    <div key={e.id} style={{ background: T.surfaceEl, borderRadius: T.r4, padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 11, color: T.warning }}>Incoming</div>
+                      <div style={{ fontSize: 12, fontFamily: T.mono, color: T.text }}>
+                        {otherNode.data.label} <span style={{color: T.dim}}>({e.label})</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>Outgoing Relationships</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {edges.filter(e => e.source === selectedNode.id).map(e => {
+                  const otherNode = nodes.find(n => n.id === e.target);
+                  if(!otherNode) return null;
+                  return (
+                    <div key={e.id} style={{ background: T.surfaceEl, borderRadius: T.r4, padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 11, color: T.info }}>Outgoing</div>
+                      <div style={{ fontSize: 12, fontFamily: T.mono, color: T.text }}>
+                        <span style={{color: T.dim}}>({e.label})</span> {otherNode.data.label}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: T.text, marginBottom: 16 }}>Graph Statistics</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+                <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 12 }}>
+                  <div style={{ fontSize: 20, color: T.text, fontFamily: T.mono }}>{graphMockData.nodes.length}</div>
+                  <div style={{ fontSize: 11, color: T.dim }}>Total Nodes</div>
+                </div>
+                <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 12 }}>
+                  <div style={{ fontSize: 20, color: T.text, fontFamily: T.mono }}>{graphMockData.edges.length}</div>
+                  <div style={{ fontSize: 11, color: T.dim }}>Total Edges</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <StatRow label="Functions" val={graphMockData.nodes.filter(n => n.data.type === 'Function').length} />
+                <StatRow label="Classes" val={graphMockData.nodes.filter(n => n.data.type === 'Class').length} />
+                <StatRow label="Modules" val={graphMockData.nodes.filter(n => n.data.type === 'Module').length} />
+                <StatRow label="Files" val={graphMockData.nodes.filter(n => n.data.type === 'File').length} />
+                <StatRow label="Packages" val={graphMockData.nodes.filter(n => n.data.type === 'Package').length} />
+                <StatRow label="Avg Connections" val={(graphMockData.edges.length / graphMockData.nodes.length).toFixed(1)} />
+                <StatRow label="Graph Density" val="0.14" />
+              </div>
+              <div style={{ marginTop: 40, textAlign: "center", color: T.faint, fontSize: 13, padding: 20 }}>
+                Select a node in the graph to view its details and relationships.
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const LegendItem = ({ label, color }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: T.dim }}>
+    <div style={{ width: 12, height: 12, borderRadius: 2, background: T.surfaceEl, border: `1px solid ${color}` }}></div>
+    {label}
+  </div>
+);
+
+const LegendEdge = ({ label, color, type }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: T.dim }}>
+    <div style={{ width: 24, height: 2, background: type === 'solid' ? color : 'transparent', borderBottom: type === 'dashed' ? `2px dashed ${color}` : 'none' }}></div>
+    {label}
+  </div>
+);
+
+const StatRow = ({ label, val }) => (
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 8, borderBottom: `1px solid ${T.borderMid}` }}>
+    <span style={{ fontSize: 12, color: T.dim }}>{label}</span>
+    <span style={{ fontSize: 12, color: T.text, fontFamily: T.mono }}>{val}</span>
+  </div>
+);
+
+/* ─── KNOWLEDGE GRAPH STATES ─────────────────────────────────────────────── */
+function GraphLoadingState() {
+  return (
+    <div style={{ padding: "40px", maxWidth: 600, margin: "0 auto", textAlign: "center" }}>
+      <div style={{ width: 64, height: 64, border: `3px solid ${T.border}`, borderTopColor: T.accent, borderRadius: "50%", margin: "0 auto 24px", animation: "spin 1s linear infinite" }} />
+      <h2 style={{ fontSize: 18, color: T.text, marginBottom: 8 }}>Generating Knowledge Graph...</h2>
+      <p style={{ color: T.dim, fontSize: 14 }}>Extracting entity relationships and building visual nodes.</p>
+    </div>
+  );
+}
+function GraphEmptyState({ onRun }) {
+  return (
+    <div style={{ padding: "40px", maxWidth: 500, margin: "0 auto", textAlign: "center" }}>
+      <div style={{ width: 64, height: 64, background: T.surfaceEl, borderRadius: T.r8, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", color: T.faint }}>
+        <Icons.arch size={24} />
+      </div>
+      <h2 style={{ fontSize: 18, color: T.text, marginBottom: 12 }}>No graph has been generated yet.</h2>
+      <p style={{ color: T.dim, fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>The Knowledge Graph visualizes dependencies, imports, and calls across your repository. Run an analysis to build it.</p>
+      <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+        <DashButton icon={Icons.arch} label="Run Analysis" variant="primary" onClick={onRun} />
+        <DashButton icon={Icons.upload} label="Refresh" variant="secondary" onClick={() => {}} />
+      </div>
+    </div>
+  );
+}
+function GraphErrorState({ onRetry }) {
+  return (
+    <div style={{ padding: "40px", maxWidth: 500, margin: "0 auto", textAlign: "center" }}>
+      <div style={{ width: 64, height: 64, background: "rgba(248,81,73,0.1)", borderRadius: T.r8, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", color: T.error }}>
+        <Icons.error size={24} />
+      </div>
+      <h2 style={{ fontSize: 18, color: T.text, marginBottom: 12 }}>Unable to load graph</h2>
+      <p style={{ color: T.dim, fontSize: 14, marginBottom: 24 }}>The graph generation process crashed due to an out-of-memory error while parsing deep dependencies.</p>
+      <DashButton icon={Icons.upload} label="Retry Generation" variant="primary" onClick={onRetry} />
+    </div>
+  );
+}
+function GraphFailedState() {
+  return <GraphErrorState onRetry={() => {}} />;
+}
+function GraphRunningState() {
+  return <GraphLoadingState />;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
 function PageStub({ pageId, setActivePage }) {
   if (pageId === "dashboard") return <DashboardPage setActivePage={setActivePage} />;
   if (pageId === "projects") return <ProjectsPage />;
@@ -4250,6 +3865,7 @@ function PageStub({ pageId, setActivePage }) {
   if (pageId === "repo-overview") return <RepoOverviewPage setActivePage={setActivePage} />;
   if (pageId === "repo-explorer") return <RepoExplorerPage setActivePage={setActivePage} />;
   if (pageId === "repo-analysis") return <RepoAnalysisPage setActivePage={setActivePage} />;
+  if (pageId === "knowledge-graph") return <KnowledgeGraphPage setActivePage={setActivePage} />;
   
   const meta = PAGE_META[pageId] || { label: "Page", breadcrumb: [pageId] };
   return (
@@ -4329,7 +3945,7 @@ function AppLayout() {
           </button>
         </div>
 
-        <TopNav breadcrumb={meta.breadcrumb || ["Dashboard"]} />
+        <TopNav breadcrumb={meta.breadcrumb || ["Dashboard"]} setActivePage={setActivePage} />
 
         {/* Scrollable content */}
         <main
