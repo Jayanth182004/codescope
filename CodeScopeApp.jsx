@@ -63,7 +63,6 @@ const Icon = ({ d, size = 16, stroke = T.faint, fill = "none", strokeWidth = 1.5
 
 const Icons = {
   alertTriangle: () => <Icon d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />,
-  eye: () => <Icon d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />,
   upload: () => <Icon d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />,
   gitBranch: () => <Icon d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9" />,
   star: () => <Icon d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />,
@@ -71,6 +70,7 @@ const Icons = {
   moreH: () => <Icon d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth={2.5} />,
   link: () => <Icon d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />,
   file: () => <Icon d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6" />,
+  database: () => <Icon d="M12 3c4.42 0 8 1.34 8 3s-3.58 3-8 3-8-1.34-8-3 3.58-3 8-3zM4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />,
   trash: () => <Icon d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />,
   gridView: () => <Icon d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />,
   listView: () => <Icon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
@@ -180,6 +180,9 @@ const GLOBAL_CSS = `
   @media (max-width: 900px) {
     .sidebar-desktop { display: none !important; }
     .sidebar-mobile-visible { display: flex !important; }
+    .knowledge-layout { grid-template-columns: 260px minmax(560px, 1fr) 320px !important; overflow-x: auto !important; }
+    .dependency-layout { grid-template-columns: minmax(220px, 260px) minmax(520px, 1fr) 300px !important; overflow-x: auto !important; }
+    .dependency-inspector { width: 300px !important; }
   }
   @media (min-width: 901px) {
     .sidebar-mobile-visible { display: none !important; }
@@ -973,11 +976,12 @@ const dashboardData = {
   ],
 };
 
-function DashButton({ children, variant = "ghost", onClick, title }) {
+function DashButton({ children, icon: IconSlot, label, variant = "ghost", onClick, title, type = "button", style }) {
   const isPrimary = variant === "primary";
   return (
     <button
-      onClick={onClick} type={type}
+      onClick={onClick}
+      type={type}
       title={title}
       style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
@@ -985,9 +989,11 @@ function DashButton({ children, variant = "ghost", onClick, title }) {
         border: `1px solid ${isPrimary ? T.accentBorder : T.border}`,
         background: isPrimary ? T.accent : T.surfaceEl,
         color: isPrimary ? "#fff" : T.dim, fontSize: 12, fontWeight: 500,
+        ...style,
       }}
     >
-      {children}
+      {IconSlot && <IconSlot />}
+      {label || children}
     </button>
   );
 }
@@ -2787,7 +2793,7 @@ function LanguageChart({ languages }) {
   );
 }
 
-function FolderMetricsWidget() {
+function FolderMetrics() {
   return (
     <WidgetShell title="Folder Metrics">
       <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13 }}>
@@ -2801,7 +2807,29 @@ function FolderMetricsWidget() {
   );
 }
 
-function ModuleTableWidget({ modules }) {
+function FileMetrics() {
+  return (
+    <WidgetShell title="File Metrics">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 13 }}>
+        {[
+          ["Average File Size", "18.5 KB"],
+          ["Largest File", "DataGrid.tsx"],
+          ["Smallest File", "index.ts"],
+          ["Generated Files", "14"],
+          ["Test Files", "216"],
+          ["Config Files", "38"],
+        ].map(([label, value]) => (
+          <div key={label} style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 10 }}>
+            <div style={{ color: T.faint, fontSize: 11, marginBottom: 4 }}>{label}</div>
+            <div style={{ color: T.text, fontFamily: T.mono, fontSize: 13 }}>{value}</div>
+          </div>
+        ))}
+      </div>
+    </WidgetShell>
+  );
+}
+
+function ModuleTable({ modules }) {
   return (
     <WidgetShell title="Module Analysis">
       <div style={{ overflowX: "auto" }}>
@@ -2834,7 +2862,7 @@ function ModuleTableWidget({ modules }) {
   );
 }
 
-function ImportTableWidget({ imports }) {
+function ImportTable({ imports }) {
   return (
     <WidgetShell title="Import Analysis">
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -2889,9 +2917,10 @@ function AnalysisHeader({ repo, onReanalyze, onDownload, status }) {
           </span>
         </div>
         <div style={{ display: "flex", gap: 16, fontSize: 12, color: T.faint, marginTop: 6 }}>
-          <span>Version: {repo.version}</span>
-          <span>Duration: {repo.duration}</span>
+          <span>Started: {repo.startedAt}</span>
           <span>Completed: {repo.completedAt}</span>
+          <span>Duration: {repo.duration}</span>
+          <span>Current Version: {repo.version}</span>
         </div>
       </div>
       <div style={{ display: "flex", gap: 12 }}>
@@ -2961,6 +2990,7 @@ function ScanProgressTimeline({ currentStep, steps, status }) {
 function RepoAnalysisPage({ setActivePage }) {
   const [status, setStatus] = useState("completed"); // "loading" | "running" | "completed" | "failed" | "empty" | "error"
   const [searchTerm, setSearchTerm] = useState("");
+  const [analysisFilters, setAnalysisFilters] = useState({ search: "", analysisType: "All", folder: "All", fileType: "All" });
   const [selectedLanguage, setSelectedLanguage] = useState("All");
   const [sortFuncField, setSortFuncField] = useState("lines");
   const [sortClassField, setSortClassField] = useState("methods");
@@ -3038,15 +3068,21 @@ function RepoAnalysisPage({ setActivePage }) {
 
   // Filtering lists
   const filteredFunctions = rawFunctions.filter(f => {
-    const matchesSearch = f.name.toLowerCase().includes(searchTerm.toLowerCase()) || f.file.toLowerCase().includes(searchTerm.toLowerCase());
+    const effectiveSearch = analysisFilters.search || searchTerm;
+    const matchesSearch = f.name.toLowerCase().includes(effectiveSearch.toLowerCase()) || f.file.toLowerCase().includes(effectiveSearch.toLowerCase());
     const matchesLang = selectedLanguage === "All" || (selectedLanguage === "TypeScript" && f.file.endsWith('.ts')) || (selectedLanguage === "React" && f.file.endsWith('.tsx'));
-    return matchesSearch && matchesLang;
+    const matchesType = analysisFilters.analysisType === "All" || analysisFilters.analysisType === "Functions";
+    const matchesFileType = analysisFilters.fileType === "All" || f.file.endsWith(analysisFilters.fileType);
+    return matchesSearch && matchesLang && matchesType && matchesFileType;
   }).sort((a, b) => b[sortFuncField] - a[sortFuncField]);
 
   const filteredClasses = rawClasses.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.file.toLowerCase().includes(searchTerm.toLowerCase());
+    const effectiveSearch = analysisFilters.search || searchTerm;
+    const matchesSearch = c.name.toLowerCase().includes(effectiveSearch.toLowerCase()) || c.file.toLowerCase().includes(effectiveSearch.toLowerCase());
     const matchesLang = selectedLanguage === "All" || (selectedLanguage === "TypeScript" && c.file.endsWith('.ts')) || (selectedLanguage === "React" && c.file.endsWith('.tsx'));
-    return matchesSearch && matchesLang;
+    const matchesType = analysisFilters.analysisType === "All" || analysisFilters.analysisType === "Classes";
+    const matchesFileType = analysisFilters.fileType === "All" || c.file.endsWith(analysisFilters.fileType);
+    return matchesSearch && matchesLang && matchesType && matchesFileType;
   }).sort((a, b) => b[sortClassField] - a[sortClassField]);
 
   if (status === "loading") {
@@ -3069,7 +3105,7 @@ function RepoAnalysisPage({ setActivePage }) {
         <div style={{ marginTop: 24, textAlign: "center", padding: 48, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8 }}>
           <div style={{ fontSize: 16, color: T.text, marginBottom: 8 }}>Parsing Codebase AST...</div>
           <div style={{ fontSize: 13, color: T.faint }}>Extracted 12 modules, analyzing functions and dependency relationships.</div>
-          <button onClick={() => setStatus("completed")} style={{ marginTop: 24, background: T.accent, color: "#fff", border: "none", padding: "8px 16px", borderRadius: T.r6, cursor: "pointer" }}>Simulate Completion</button>
+          <button onClick={() => setStatus("completed")} style={{ marginTop: 24, background: T.accent, color: "#fff", border: "none", padding: "8px 16px", borderRadius: T.r6, cursor: "pointer" }}>View Completed Results</button>
         </div>
       </div>
     );
@@ -3113,82 +3149,41 @@ function RepoAnalysisPage({ setActivePage }) {
 
   return (
     <div className="page-in" style={{ padding: "32px 36px", maxWidth: 1100, margin: "0 auto" }}>
-      
-      {/* Dev Switch State controls */}
-      <div style={{ display: "flex", gap: 10, background: T.surface, border: `1px solid ${T.border}`, padding: 8, borderRadius: T.r6, marginBottom: 24, justifyContent: "flex-end" }}>
-        <span style={{ fontSize: 12, color: T.faint, alignSelf: "center", marginRight: 10 }}>Dev controls:</span>
-        <button onClick={() => setStatus("loading")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Loading</button>
-        <button onClick={() => setStatus("running")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Running</button>
-        <button onClick={() => setStatus("failed")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Fail</button>
-        <button onClick={() => setStatus("error")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Error</button>
-        <button onClick={() => setStatus("empty")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Empty</button>
-        <button onClick={() => setStatus("completed")} style={{ fontSize: 11, background: T.surfaceEl, border: `1px solid ${T.border}`, color: T.text, padding: "4px 8px", cursor: "pointer", borderRadius: T.r4 }}>Simulate Success</button>
-      </div>
 
       <AnalysisHeader repo={repoMeta} onReanalyze={() => setStatus("running")} onDownload={() => {}} status="completed" />
+      <ProgressTimeline currentStep={6} steps={scanSteps} status="completed" />
 
       {/* Summary Cards Grid */}
       <h3 style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 16, marginTop: 0 }}>Codebase Aggregates</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-        <StatCard label="Total Files" value="1,248" sub="TS & TSX" />
-        <StatCard label="Total Folders" value="142" />
-        <StatCard label="Total LOC" value="142,400" sub="Lines of code" />
-        <StatCard label="Languages Detected" value="9" sub="TS, React, Go, Py..." />
-        <StatCard label="Modules" value="12" />
-        <StatCard label="Packages" value="3" sub="Monorepo Packages" />
-        <StatCard label="Functions" value="4,217" />
-        <StatCard label="Classes" value="156" />
-        <StatCard label="Imports" value="9,642" />
-        <StatCard label="Average File Size" value="18.5 KB" />
-        <StatCard label="Largest File" value="DataGrid.tsx" sub="112 lines" />
-        <StatCard label="Largest Folder" value="/packages/ui" sub="14.2 MB" />
+        <SummaryCard label="Total Files" value="1,248" sub="TS & TSX" />
+        <SummaryCard label="Total Folders" value="142" />
+        <SummaryCard label="Total LOC" value="142,400" sub="Lines of code" />
+        <SummaryCard label="Languages Detected" value="9" sub="TS, React, Go, Py..." />
+        <SummaryCard label="Modules" value="12" />
+        <SummaryCard label="Packages" value="3" sub="Monorepo Packages" />
+        <SummaryCard label="Functions" value="4,217" />
+        <SummaryCard label="Classes" value="156" />
+        <SummaryCard label="Imports" value="9,642" />
+        <SummaryCard label="Average File Size" value="18.5 KB" />
+        <SummaryCard label="Largest File" value="DataGrid.tsx" sub="112 lines" />
+        <SummaryCard label="Largest Folder" value="/packages/ui" sub="14.2 MB" />
       </div>
 
-      {/* Search & Filters */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
-        <div style={{ flex: 1, position: "relative" }}>
-          <span style={{ position: "absolute", left: 12, top: 10, color: T.faint }}><Icons.search size={16} /></span>
-          <input 
-            type="text" 
-            placeholder="Search functions, classes or modules..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "8px 12px 8px 36px", color: T.text, outline: "none" }} 
-          />
-        </div>
-        <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "0 12px", borderRadius: T.r6, outline: "none" }}>
-          <option>Type: All Types</option>
-          <option>Functions</option>
-          <option>Classes</option>
-        </select>
-        <select 
-          value={selectedLanguage}
-          onChange={(e) => setSelectedLanguage(e.target.value)}
-          style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "0 12px", borderRadius: T.r6, outline: "none" }}
-        >
-          <option value="All">Language: All</option>
-          <option value="TypeScript">TypeScript</option>
-          <option value="React">React</option>
-        </select>
-      </div>
+      <AnalysisFilters filters={analysisFilters} setFilters={setAnalysisFilters} selectedLanguage={selectedLanguage} setSelectedLanguage={setSelectedLanguage} />
 
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 24 }}>
         {/* Left Column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           <LanguageChart languages={languages} />
           <FolderMetricsWidget />
+          <FileMetrics />
           <ModuleTableWidget modules={modules} />
 
           <WidgetShell title="Analysis Warnings">
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {warnings.map((w, idx) => (
-                <div key={idx} style={{ background: T.surfaceEl, borderLeft: `4px solid ${w.level === "warning" ? T.warning : T.info}`, padding: 12, borderRadius: T.r6, display: "flex", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 650, color: T.text }}>{w.type}</div>
-                    <div style={{ fontSize: 12, color: T.dim, marginTop: 4 }}>{w.message}</div>
-                  </div>
-                  <span style={{ fontSize: 11, color: T.faint }}>Info</span>
-                </div>
+                <WarningCard key={idx} warning={w} />
               ))}
             </div>
           </WidgetShell>
@@ -3196,112 +3191,17 @@ function RepoAnalysisPage({ setActivePage }) {
 
         {/* Right Column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          {/* Function Table */}
-          <WidgetShell title="Function Analysis">
-            <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-              <span style={{ fontSize: 11, color: T.faint, alignSelf: "center" }}>Sort by:</span>
-              <button onClick={() => setSortFuncField("lines")} style={{ padding: "4px 8px", background: sortFuncField === "lines" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortFuncField === "lines" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Lines</button>
-              <button onClick={() => setSortFuncField("params")} style={{ padding: "4px 8px", background: sortFuncField === "params" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortFuncField === "params" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Params</button>
-            </div>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${T.borderMid}`, color: T.faint, textAlign: "left" }}>
-                    <th style={{ padding: "8px 4px" }}>Function</th>
-                    <th style={{ padding: "8px 4px" }}>File</th>
-                    <th style={{ padding: "8px 4px" }}>Visibility</th>
-                    <th style={{ padding: "8px 4px" }}>Lines</th>
-                    <th style={{ padding: "8px 4px" }}>Params</th>
-                    <th style={{ padding: "8px 4px" }}>Return Type</th>
-                    <th style={{ padding: "8px 4px" }}>Complexity</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredFunctions.map(f => (
-                    <tr key={f.name} style={{ borderBottom: `1px solid ${T.border}` }}>
-                      <td style={{ padding: "8px 4px", color: T.text, fontWeight: 500 }}>{f.name}()</td>
-                      <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{f.file}</td>
-                      <td style={{ padding: "8px 4px", color: T.dim }}>{f.visibility}</td>
-                      <td style={{ padding: "8px 4px", color: T.dim }}>{f.lines}</td>
-                      <td style={{ padding: "8px 4px", color: T.dim }}>{f.params}</td>
-                      <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{f.returnType}</td>
-                      <td style={{ padding: "8px 4px", color: f.complexity === "High" ? T.error : f.complexity === "Medium" ? T.warning : T.success }}>{f.complexity}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </WidgetShell>
-
-          {/* Class Table */}
-          <WidgetShell title="Class Analysis">
-            <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-              <span style={{ fontSize: 11, color: T.faint, alignSelf: "center" }}>Sort by:</span>
-              <button onClick={() => setSortClassField("methods")} style={{ padding: "4px 8px", background: sortClassField === "methods" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortClassField === "methods" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Methods</button>
-              <button onClick={() => setSortClassField("properties")} style={{ padding: "4px 8px", background: sortClassField === "properties" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortClassField === "properties" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Properties</button>
-            </div>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${T.borderMid}`, color: T.faint, textAlign: "left" }}>
-                    <th style={{ padding: "8px 4px" }}>Class</th>
-                    <th style={{ padding: "8px 4px" }}>File</th>
-                    <th style={{ padding: "8px 4px" }}>Methods</th>
-                    <th style={{ padding: "8px 4px" }}>Props</th>
-                    <th style={{ padding: "8px 4px" }}>Inheritance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredClasses.map(c => (
-                    <tr key={c.name} style={{ borderBottom: `1px solid ${T.border}` }}>
-                      <td style={{ padding: "8px 4px", color: T.text, fontWeight: 500 }}>{c.name}</td>
-                      <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{c.file}</td>
-                      <td style={{ padding: "8px 4px", color: T.dim }}>{c.methods}</td>
-                      <td style={{ padding: "8px 4px", color: T.dim }}>{c.properties}</td>
-                      <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{c.inheritance}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </WidgetShell>
+          <FunctionTable functions={filteredFunctions} sortFuncField={sortFuncField} setSortFuncField={setSortFuncField} />
+          <ClassTable classes={filteredClasses} sortClassField={sortClassField} setSortClassField={setSortClassField} />
 
           <ImportTableWidget imports={importsData} />
 
           <WidgetShell title="AI Recommendations">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div 
-                onClick={() => setActivePage('arch')} 
-                style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 14, cursor: "pointer" }} 
-                className="repo-card"
-              >
-                <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>Explore Architecture</div>
-                <div style={{ fontSize: 12, color: T.faint }}>Inspect system diagrams.</div>
-              </div>
-              <div 
-                onClick={() => setActivePage('deps')} 
-                style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 14, cursor: "pointer" }} 
-                className="repo-card"
-              >
-                <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>View Dependencies</div>
-                <div style={{ fontSize: 12, color: T.faint }}>Track circular imports.</div>
-              </div>
-              <div 
-                onClick={() => setActivePage('repo-overview')} 
-                style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 14, cursor: "pointer" }} 
-                className="repo-card"
-              >
-                <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>Open Largest Module</div>
-                <div style={{ fontSize: 12, color: T.faint }}>Inspect /packages/ui.</div>
-              </div>
-              <div 
-                onClick={() => setActivePage('repo-explorer')} 
-                style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 14, cursor: "pointer" }} 
-                className="repo-card"
-              >
-                <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>Analyze Complex Files</div>
-                <div style={{ fontSize: 12, color: T.faint }}>Open DataGrid.tsx.</div>
-              </div>
+              <RecommendationCard title="Explore Architecture" desc="Inspect system diagrams." onClick={() => setActivePage('arch')} />
+              <RecommendationCard title="View Dependencies" desc="Track circular imports." onClick={() => setActivePage('deps')} />
+              <RecommendationCard title="Open Largest Module" desc="Inspect /packages/ui." onClick={() => setActivePage('repo-overview')} />
+              <RecommendationCard title="Analyze Complex Files" desc="Open DataGrid.tsx." onClick={() => setActivePage('repo-explorer')} />
             </div>
           </WidgetShell>
         </div>
@@ -3364,6 +3264,8 @@ const getEdgeStyle = (label, selectedNodeId, source, target) => {
   let strokeDasharray = "0";
   let animated = false;
 
+  if (label === "contains") { color = T.faint; strokeDasharray = "0"; }
+  if (label === "defines") { color = T.accentBright; strokeDasharray = "1 5"; }
   if (label === "imports") { color = T.warning; strokeDasharray = "5 5"; }
   if (label === "calls") { color = T.info; animated = true; }
   if (label === "depends on") { color = T.error; strokeDasharray = "2 4"; }
@@ -3383,7 +3285,11 @@ const getEdgeStyle = (label, selectedNodeId, source, target) => {
     }
   }
 
-  return { style: { stroke: color, strokeDasharray, opacity }, animated };
+  return {
+    style: { stroke: color, strokeDasharray, opacity, strokeWidth: source === selectedNodeId || target === selectedNodeId ? 2 : 1.25 },
+    animated,
+    markerEnd: { type: MarkerType.ArrowClosed, color },
+  };
 };
 
 const CustomGraphNode = ({ data, selected }) => {
@@ -3431,7 +3337,15 @@ const CustomGraphNode = ({ data, selected }) => {
   );
 };
 
-const nodeTypes = { custom: CustomGraphNode };
+function GraphNode(props) {
+  return <CustomGraphNode {...props} />;
+}
+
+function GraphEdge(label, selectedNodeId, source, target) {
+  return getEdgeStyle(label, selectedNodeId, source, target);
+}
+
+const nodeTypes = { custom: GraphNode };
 
 function KnowledgeGraphPage({ setActivePage }) {
   const [status, setStatus] = useState("success");
@@ -3439,6 +3353,418 @@ function KnowledgeGraphPage({ setActivePage }) {
     <ReactFlowProvider>
       <KnowledgeGraphInner status={status} setStatus={setStatus} />
     </ReactFlowProvider>
+  );
+}
+
+function ProgressTimeline(props) {
+  return <ScanProgressTimeline {...props} />;
+}
+
+function SummaryCard(props) {
+  return <StatCard {...props} />;
+}
+
+function AnalysisSearch({ value, onChange }) {
+  return (
+    <div style={{ flex: 1, position: "relative", minWidth: 220 }}>
+      <span style={{ position: "absolute", left: 12, top: 10, color: T.faint }}><Icons.search size={16} /></span>
+      <input
+        aria-label="Search repository analysis"
+        type="text"
+        placeholder="Search functions, classes, modules, files..."
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "8px 12px 8px 36px", color: T.text, outline: "none" }}
+      />
+    </div>
+  );
+}
+
+function AnalysisFilters({ filters, setFilters, selectedLanguage, setSelectedLanguage }) {
+  const selectStyle = { background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "0 12px", borderRadius: T.r6, outline: "none", minHeight: 38 };
+  return (
+    <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }} aria-label="Analysis filters">
+      <AnalysisSearch value={filters.search} onChange={search => setFilters({ ...filters, search })} />
+      <select aria-label="Filter by analysis type" value={filters.analysisType} onChange={e => setFilters({ ...filters, analysisType: e.target.value })} style={selectStyle}>
+        <option value="All">Analysis Type: All</option>
+        <option value="Functions">Functions</option>
+        <option value="Classes">Classes</option>
+        <option value="Modules">Modules</option>
+        <option value="Files">Files</option>
+      </select>
+      <select aria-label="Filter by language" value={selectedLanguage} onChange={(e) => setSelectedLanguage(e.target.value)} style={selectStyle}>
+        <option value="All">Language: All</option>
+        <option value="TypeScript">TypeScript</option>
+        <option value="React">React</option>
+        <option value="JavaScript">JavaScript</option>
+        <option value="Python">Python</option>
+        <option value="Go">Go</option>
+      </select>
+      <select aria-label="Filter by folder" value={filters.folder} onChange={e => setFilters({ ...filters, folder: e.target.value })} style={selectStyle}>
+        <option value="All">Folder: All</option>
+        <option value="/src/auth">/src/auth</option>
+        <option value="/src/components">/src/components</option>
+        <option value="/src/utils">/src/utils</option>
+        <option value="/packages/ui">/packages/ui</option>
+      </select>
+      <select aria-label="Filter by file type" value={filters.fileType} onChange={e => setFilters({ ...filters, fileType: e.target.value })} style={selectStyle}>
+        <option value="All">File Type: All</option>
+        <option value=".ts">.ts</option>
+        <option value=".tsx">.tsx</option>
+        <option value=".js">.js</option>
+        <option value=".json">.json</option>
+      </select>
+    </div>
+  );
+}
+
+function FunctionTable({ functions, sortFuncField, setSortFuncField }) {
+  return (
+    <WidgetShell title="Function Analysis">
+      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+        <span style={{ fontSize: 11, color: T.faint, alignSelf: "center" }}>Sort by:</span>
+        <button onClick={() => setSortFuncField("lines")} style={{ padding: "4px 8px", background: sortFuncField === "lines" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortFuncField === "lines" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Lines</button>
+        <button onClick={() => setSortFuncField("params")} style={{ padding: "4px 8px", background: sortFuncField === "params" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortFuncField === "params" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Params</button>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${T.borderMid}`, color: T.faint, textAlign: "left" }}>
+              {["Function", "File", "Visibility", "Lines", "Params", "Return Type", "Complexity"].map(h => <th key={h} style={{ padding: "8px 4px" }}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {functions.map(f => (
+              <tr key={f.name} style={{ borderBottom: `1px solid ${T.border}` }}>
+                <td style={{ padding: "8px 4px", color: T.text, fontWeight: 500 }}>{f.name}()</td>
+                <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{f.file}</td>
+                <td style={{ padding: "8px 4px", color: T.dim }}>{f.visibility}</td>
+                <td style={{ padding: "8px 4px", color: T.dim }}>{f.lines}</td>
+                <td style={{ padding: "8px 4px", color: T.dim }}>{f.params}</td>
+                <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{f.returnType}</td>
+                <td style={{ padding: "8px 4px", color: f.complexity === "High" ? T.error : f.complexity === "Medium" ? T.warning : T.success }}>{f.complexity}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </WidgetShell>
+  );
+}
+
+function ClassTable({ classes, sortClassField, setSortClassField }) {
+  return (
+    <WidgetShell title="Class Analysis">
+      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+        <span style={{ fontSize: 11, color: T.faint, alignSelf: "center" }}>Sort by:</span>
+        <button onClick={() => setSortClassField("methods")} style={{ padding: "4px 8px", background: sortClassField === "methods" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortClassField === "methods" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Methods</button>
+        <button onClick={() => setSortClassField("properties")} style={{ padding: "4px 8px", background: sortClassField === "properties" ? T.accentSoft : T.surfaceEl, border: `1px solid ${sortClassField === "properties" ? T.accentBorder : T.border}`, borderRadius: T.r4, color: T.text, fontSize: 11, cursor: "pointer" }}>Properties</button>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${T.borderMid}`, color: T.faint, textAlign: "left" }}>
+              {["Class", "File", "Methods", "Props", "Inheritance"].map(h => <th key={h} style={{ padding: "8px 4px" }}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {classes.map(c => (
+              <tr key={c.name} style={{ borderBottom: `1px solid ${T.border}` }}>
+                <td style={{ padding: "8px 4px", color: T.text, fontWeight: 500 }}>{c.name}</td>
+                <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{c.file}</td>
+                <td style={{ padding: "8px 4px", color: T.dim }}>{c.methods}</td>
+                <td style={{ padding: "8px 4px", color: T.dim }}>{c.properties}</td>
+                <td style={{ padding: "8px 4px", color: T.dim, fontFamily: T.mono }}>{c.inheritance}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </WidgetShell>
+  );
+}
+
+function WarningCard({ warning }) {
+  return (
+    <div style={{ background: T.surfaceEl, borderLeft: `4px solid ${warning.level === "warning" ? T.warning : T.info}`, padding: 12, borderRadius: T.r6, display: "flex", justifyContent: "space-between" }}>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 650, color: T.text }}>{warning.type}</div>
+        <div style={{ fontSize: 12, color: T.dim, marginTop: 4 }}>{warning.message}</div>
+      </div>
+      <span style={{ fontSize: 11, color: T.faint }}>Info</span>
+    </div>
+  );
+}
+
+function RecommendationCard({ title, desc, onClick }) {
+  return (
+    <button onClick={onClick} className="repo-card" style={{ background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 14, cursor: "pointer", textAlign: "left", width: "100%" }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 12, color: T.faint }}>{desc}</div>
+    </button>
+  );
+}
+
+function FolderMetricsWidget() {
+  return <FolderMetrics />;
+}
+
+function ModuleTableWidget({ modules }) {
+  return <ModuleTable modules={modules} />;
+}
+
+function ImportTableWidget({ imports }) {
+  return <ImportTable imports={imports} />;
+}
+
+function GraphSearch({ value, onChange }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></div>
+      <input
+        aria-label="Search by file, class, function, module, or package"
+        type="text"
+        placeholder="Search files, classes, functions..."
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ width: "100%", padding: "6px 12px 6px 30px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, fontSize: 13, outline: "none" }}
+      />
+    </div>
+  );
+}
+
+function GraphFilters({ searchTerm, setSearchTerm, filterType, setFilterType, filterLang, setFilterLang, filterFolder, setFilterFolder, filterRel, setFilterRel, filterVis, setFilterVis, folderOptions }) {
+  return (
+    <section style={{ padding: 16, borderBottom: `1px solid ${T.border}`, display: "flex", flexDirection: "column", gap: 12 }} aria-label="Graph filters">
+      <h3 style={{ fontSize: 13, fontWeight: 500, color: T.text }}>Graph Filters</h3>
+      <GraphSearch value={searchTerm} onChange={setSearchTerm} />
+      <GraphSelect label="Node Type" ariaLabel="Filter by Node Type" value={filterType} onChange={setFilterType} options={["All", "Repository", "Folder", "File", "Module", "Package", "Class", "Function", "Interface", "Database Table", "API Endpoint", "Service"]} />
+      <GraphSelect label="Language" ariaLabel="Filter by Language" value={filterLang} onChange={setFilterLang} options={["All", "TypeScript", "React", "SQL", "HTTP", "Go", "Mixed"]} />
+      <GraphSelect label="Folder" ariaLabel="Filter by Folder" value={filterFolder} onChange={setFilterFolder} options={folderOptions} />
+      <GraphSelect label="Relationship Type" ariaLabel="Filter by Relationship Type" value={filterRel} onChange={setFilterRel} options={[
+        ["All", "All Relationships"],
+        ["contains", "Contains"],
+        ["imports", "Imports"],
+        ["calls", "Calls"],
+        ["defines", "Defines"],
+        ["extends", "Extends"],
+        ["implements", "Implements"],
+        ["uses", "Uses"],
+        ["depends on", "Depends On"],
+        ["exports", "Exports"],
+        ["references", "References"],
+      ]} />
+      <GraphSelect label="Visibility" ariaLabel="Filter by Visibility" value={filterVis} onChange={setFilterVis} options={["All", "Public", "Private"]} />
+    </section>
+  );
+}
+
+function GraphSelect({ label, ariaLabel, value, onChange, options }) {
+  return (
+    <div>
+      <div style={{ marginBottom: 4, fontSize: 11, color: T.dim }}>{label}</div>
+      <select aria-label={ariaLabel} value={value} onChange={e => onChange(e.target.value)} style={{ width: "100%", padding: "6px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.text, fontSize: 12, outline: "none" }}>
+        {options.map(option => {
+          const valueLabel = Array.isArray(option) ? option : [option, option === "All" ? `All ${label === "Folder" ? "Folders" : ""}`.trim() || "All" : option];
+          return <option key={valueLabel[0]} value={valueLabel[0]}>{valueLabel[1]}</option>;
+        })}
+      </select>
+    </div>
+  );
+}
+
+function GraphLegend() {
+  return (
+    <section style={{ padding: 16, flex: 1, overflowY: "auto" }} aria-label="Graph legend">
+      <h3 style={{ fontSize: 12, fontWeight: 500, color: T.dim, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Legend</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <LegendItem label="Repository" color={T.accent} />
+        <LegendItem label="Folder / File" color={T.border} />
+        <LegendItem label="Module / API" color={T.info} />
+        <LegendItem label="Class" color={T.warning} />
+        <LegendItem label="Function" color={T.success} />
+        <LegendItem label="Database" color={T.error} />
+        <LegendItem label="Package" color="#a371f7" />
+        <LegendItem label="Interface" color="#71f7a3" />
+        <LegendItem label="Service" color="#f771a3" />
+      </div>
+      <h3 style={{ fontSize: 12, fontWeight: 500, color: T.dim, marginTop: 24, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Edges</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <LegendEdge label="contains" color={T.faint} type="solid" />
+        <LegendEdge label="defines" color={T.accentBright} type="dotted" />
+        <LegendEdge label="imports" color={T.warning} type="dashed" />
+        <LegendEdge label="calls" color={T.info} type="solid" />
+        <LegendEdge label="depends on" color={T.error} type="dashed" />
+        <LegendEdge label="uses" color={T.accentBright} type="solid" />
+        <LegendEdge label="exports" color="#a371f7" type="solid" />
+        <LegendEdge label="implements" color={T.success} type="dashed" />
+        <LegendEdge label="extends" color="#71f7a3" type="dashed" />
+        <LegendEdge label="references" color="#f771a3" type="dashed" />
+      </div>
+    </section>
+  );
+}
+
+function GraphToolbar({ showLabels, setShowLabels, resetGraph, centerGraph }) {
+  return (
+    <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, display: "flex", gap: 8, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "6px 8px", boxShadow: T.shadow, whiteSpace: "nowrap" }}>
+      <button aria-label="Toggle Labels" onClick={() => setShowLabels(!showLabels)} style={{ padding: "4px 8px", background: "none", color: showLabels ? T.text : T.dim, border: "none", cursor: "pointer", fontSize: 12 }}>{showLabels ? "Hide Labels" : "Show Labels"}</button>
+      <div style={{ width: 1, background: T.border }} />
+      <button aria-label="Reset Graph" onClick={resetGraph} style={{ padding: "4px 8px", background: "none", color: T.text, border: "none", cursor: "pointer", fontSize: 12 }}>Reset Graph</button>
+      <div style={{ width: 1, background: T.border }} />
+      <button aria-label="Center Graph" onClick={centerGraph} style={{ padding: "4px 8px", background: "none", color: T.text, border: "none", cursor: "pointer", fontSize: 12 }} title="Refocus the graph">Center Graph</button>
+      <div style={{ width: 1, background: T.border }} />
+      <button aria-label="Export Image" onClick={() => alert("Export image placeholder")} style={{ padding: "4px 8px", background: "none", color: T.text, border: "none", cursor: "pointer", fontSize: 12 }}>Export Image</button>
+    </div>
+  );
+}
+
+function GraphCanvas({ nodes, edges, onNodesChange, onEdgesChange, onNodeClick, onPaneClick }) {
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onNodeClick={onNodeClick}
+      onPaneClick={onPaneClick}
+      nodeTypes={nodeTypes}
+      fitView
+      attributionPosition="bottom-right"
+      theme="dark"
+    >
+      <Background color={T.border} gap={20} size={1} />
+      <Controls style={{ display: 'flex', flexDirection: 'column', backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, overflow: 'hidden' }} />
+      <MiniMap
+        nodeColor={n => {
+          if(n.data.type === 'Class') return T.warning;
+          if(n.data.type === 'Function') return T.success;
+          if(n.data.type === 'Package') return "#a371f7";
+          if(n.data.type === 'Service') return "#f771a3";
+          if(n.data.type === 'Repository') return T.accent;
+          return T.surfaceEl;
+        }}
+        style={{ backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6 }}
+        maskColor="rgba(0,0,0,0.5)"
+      />
+    </ReactFlow>
+  );
+}
+
+function KnowledgeNodeInspector({ selectedNode, nodes, edges, setActivePage }) {
+  if (!selectedNode) return null;
+  const children = graphMockData.nodes.filter(n => n.data.parent === selectedNode.id);
+  const incoming = edges.filter(e => e.target === selectedNode.id);
+  const outgoing = edges.filter(e => e.source === selectedNode.id);
+  return (
+    <section style={{ padding: 20 }} aria-label="Selected node details">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <div style={{ width: 32, height: 32, borderRadius: T.r6, background: T.surfaceEl, display: "flex", alignItems: "center", justifyContent: "center", color: T.text }}><Icons.file size={16} /></div>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: T.text, fontFamily: T.mono }}>{selectedNode.data.label}</div>
+          <div style={{ fontSize: 11, color: T.dim }}>{selectedNode.data.type} &middot; {selectedNode.data.lang}</div>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 24 }}>
+        <DashButton icon={Icons.search} label="Open File" variant="secondary" onClick={() => {}} />
+        <DashButton icon={Icons.arch} label="View Analysis" variant="secondary" onClick={() => setActivePage?.("repo-analysis")} />
+        <DashButton icon={Icons.deps} label="View Dependencies" variant="secondary" onClick={() => setActivePage?.("deps")} style={{ gridColumn: "1 / -1" }} />
+      </div>
+      <GraphMetadata selectedNode={selectedNode} />
+      <RelatedNodeList title={`Children (${children.length})`} nodes={children} />
+      <RelationshipList title={`Incoming Relationships (${incoming.length})`} edges={incoming} nodes={nodes} direction="incoming" />
+      <RelationshipList title={`Outgoing Relationships (${outgoing.length})`} edges={outgoing} nodes={nodes} direction="outgoing" />
+    </section>
+  );
+}
+
+function GraphMetadata({ selectedNode }) {
+  return (
+    <>
+      <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>Metadata</div>
+      <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 12, marginBottom: 24, fontSize: 12, color: T.text }}>
+        {[
+          ["Name", selectedNode.data.label],
+          ["Type", selectedNode.data.type],
+          ["Path", selectedNode.data.path],
+          ["Language", selectedNode.data.lang],
+          ["Parent", selectedNode.data.parent || "none"],
+          ["Visibility", selectedNode.data.visibility],
+        ].map(([label, value]) => (
+          <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: label === "Visibility" ? 0 : 8 }}>
+            <span style={{ color: T.faint }}>{label}</span>
+            <span style={{ fontFamily: label === "Path" || label === "Parent" ? T.mono : T.sans, color: label === "Visibility" && value === "Public" ? T.success : T.dim, textAlign: "right", wordBreak: "break-word" }}>{value}</span>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function RelatedNodeList({ title, nodes }) {
+  if (!nodes.length) return null;
+  return (
+    <>
+      <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>{title}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 24 }}>
+        {nodes.map(node => (
+          <div key={node.id} style={{ fontSize: 12, fontFamily: T.mono, color: T.text, padding: "4px 8px", background: T.surfaceEl, borderRadius: T.r4 }}>
+            {node.data.label} <span style={{ color: T.faint, fontSize: 10 }}>({node.data.type})</span>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function RelationshipList({ title, edges, nodes, direction }) {
+  return (
+    <>
+      <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>{title}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+        {edges.length === 0 && <div style={{ fontSize: 12, color: T.faint, background: T.surfaceEl, borderRadius: T.r4, padding: "8px 10px" }}>No relationships</div>}
+        {edges.map(edge => {
+          const otherNode = nodes.find(n => n.id === (direction === "incoming" ? edge.source : edge.target));
+          if (!otherNode) return null;
+          return (
+            <div key={edge.id} style={{ background: T.surfaceEl, borderRadius: T.r4, padding: "8px 12px", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div style={{ fontSize: 11, color: direction === "incoming" ? T.warning : T.info }}>{edge.label}</div>
+              <div style={{ fontSize: 12, fontFamily: T.mono, color: T.text, textAlign: "right" }}>{otherNode.data.label}</div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function KnowledgeStatisticsPanel() {
+  return (
+    <section style={{ padding: 20 }} aria-label="Graph statistics">
+      <div style={{ fontSize: 14, fontWeight: 500, color: T.text, marginBottom: 16 }}>Graph Statistics</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+        <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 12 }}>
+          <div style={{ fontSize: 20, color: T.text, fontFamily: T.mono }}>{graphMockData.nodes.length}</div>
+          <div style={{ fontSize: 11, color: T.dim }}>Total Nodes</div>
+        </div>
+        <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 12 }}>
+          <div style={{ fontSize: 20, color: T.text, fontFamily: T.mono }}>{graphMockData.edges.length}</div>
+          <div style={{ fontSize: 11, color: T.dim }}>Total Edges</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <StatRow label="Functions" val={graphMockData.nodes.filter(n => n.data.type === 'Function').length} />
+        <StatRow label="Classes" val={graphMockData.nodes.filter(n => n.data.type === 'Class').length} />
+        <StatRow label="Modules" val={graphMockData.nodes.filter(n => n.data.type === 'Module').length} />
+        <StatRow label="Files" val={graphMockData.nodes.filter(n => n.data.type === 'File').length} />
+        <StatRow label="Packages" val={graphMockData.nodes.filter(n => n.data.type === 'Package').length} />
+        <StatRow label="Avg Connections" val={(graphMockData.edges.length / graphMockData.nodes.length).toFixed(1)} />
+        <StatRow label="Graph Density" val="0.14" />
+      </div>
+      <div style={{ marginTop: 40, textAlign: "center", color: T.faint, fontSize: 13, padding: 20 }}>
+        Select a node in the graph to view its details and relationships.
+      </div>
+    </section>
   );
 }
 
@@ -3451,11 +3777,13 @@ function KnowledgeGraphInner({ status, setStatus }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("All");
   const [filterLang, setFilterLang] = useState("All");
+  const [filterFolder, setFilterFolder] = useState("All");
   const [filterRel, setFilterRel] = useState("All");
   const [filterVis, setFilterVis] = useState("All");
   const [showLabels, setShowLabels] = useState(true);
   
   const { fitView } = useReactFlow();
+  const folderOptions = ["All", ...graphMockData.nodes.filter(n => n.data.type === "Folder").map(n => [n.id, n.data.path])];
 
   // Initialize and apply filters dynamically
   useEffect(() => {
@@ -3463,8 +3791,10 @@ function KnowledgeGraphInner({ status, setStatus }) {
       const matchSearch = node.data.label.toLowerCase().includes(searchTerm.toLowerCase());
       const matchType = filterType === "All" || node.data.type === filterType;
       const matchLang = filterLang === "All" || node.data.lang === filterLang;
+      const folderNode = graphMockData.nodes.find(n => n.id === filterFolder);
+      const matchFolder = filterFolder === "All" || node.id === filterFolder || node.data.parent === filterFolder || (folderNode && node.data.path?.startsWith(folderNode.data.path));
       const matchVis = filterVis === "All" || node.data.visibility === filterVis;
-      const isVisible = matchSearch && matchType && matchLang && matchVis;
+      const isVisible = matchSearch && matchType && matchLang && matchFolder && matchVis;
       
       return {
         ...node,
@@ -3479,7 +3809,7 @@ function KnowledgeGraphInner({ status, setStatus }) {
       const targetVisible = filteredNodes.find(n => n.id === edge.target && !n.data.hidden);
       const isVisible = matchRel && sourceVisible && targetVisible;
 
-      const edgeStyleProps = getEdgeStyle(edge.label, selectedNodeId, edge.source, edge.target);
+      const edgeStyleProps = GraphEdge(edge.label, selectedNodeId, edge.source, edge.target);
 
       return {
         ...edge,
@@ -3491,12 +3821,12 @@ function KnowledgeGraphInner({ status, setStatus }) {
 
     setNodes(filteredNodes);
     setEdges(filteredEdges);
-  }, [searchTerm, filterType, filterLang, filterRel, filterVis, showLabels, selectedNodeId, setNodes, setEdges]);
+  }, [searchTerm, filterType, filterLang, filterFolder, filterRel, filterVis, showLabels, selectedNodeId, setNodes, setEdges]);
 
   // Hook to refit view when filters change heavily (optional, but good UX)
   useEffect(() => {
     setTimeout(() => fitView({ duration: 800, padding: 0.2 }), 50);
-  }, [searchTerm, filterType, filterLang, showLabels, fitView]);
+  }, [searchTerm, filterType, filterLang, filterFolder, showLabels, fitView]);
 
   const onNodeClick = (_, node) => setSelectedNodeId(node.id);
   const onPaneClick = () => setSelectedNodeId(null);
@@ -3511,282 +3841,50 @@ function KnowledgeGraphInner({ status, setStatus }) {
 
   return (
     <div style={{ display: "flex", height: "100%", flexDirection: "column" }}>
-      {/* Dev Switcher */}
-      <div style={{ padding: "8px 16px", background: T.surface, borderBottom: `1px solid ${T.border}`, display: "flex", gap: 8, overflowX: "auto" }}>
-        <span style={{ fontSize: 11, color: T.faint, alignSelf: "center", marginRight: 8, fontFamily: T.mono }}>DEV STATE:</span>
-        {["loading", "running", "failed", "empty", "error", "success"].map(s => (
-          <button key={s} aria-label={`Switch to ${s} state`} onClick={() => setStatus(s)} style={{ padding: "4px 8px", background: status === s ? T.accent : T.surfaceEl, color: status === s ? "#fff" : T.dim, border: `1px solid ${status === s ? T.accent : T.border}`, borderRadius: T.r4, fontSize: 11, cursor: "pointer" }}>
-            {s}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      <div className="knowledge-layout" style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 320px", flex: 1, overflow: "hidden" }}>
         {/* Left Sidebar */}
         <div style={{ width: 260, borderRight: `1px solid ${T.border}`, background: T.surface, display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: 16, borderBottom: `1px solid ${T.border}`, display: "flex", flexDirection: "column", gap: 12 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 500, color: T.text }}>Graph Filters</h3>
-            
-            <div style={{ position: "relative" }}>
-              <div style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></div>
-              <input 
-                aria-label="Search nodes"
-                type="text" 
-                placeholder="Search nodes..." 
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                style={{ width: "100%", padding: "6px 12px 6px 30px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, fontSize: 13, outline: "none" }}
-              />
-            </div>
-            
-            <div>
-              <div style={{ marginBottom: 4, fontSize: 11, color: T.dim }}>Node Type</div>
-              <select aria-label="Filter by Node Type" value={filterType} onChange={e => setFilterType(e.target.value)} style={{ width: "100%", padding: "6px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.text, fontSize: 12, outline: "none" }}>
-                <option value="All">All Types</option>
-                <option value="Repository">Repository</option>
-                <option value="Folder">Folder</option>
-                <option value="File">File</option>
-                <option value="Module">Module</option>
-                <option value="Package">Package</option>
-                <option value="Class">Class</option>
-                <option value="Function">Function</option>
-                <option value="Interface">Interface</option>
-                <option value="Database Table">Database Table</option>
-                <option value="API Endpoint">API Endpoint</option>
-                <option value="Service">Service</option>
-              </select>
-            </div>
-
-            <div>
-              <div style={{ marginBottom: 4, fontSize: 11, color: T.dim }}>Language</div>
-              <select aria-label="Filter by Language" value={filterLang} onChange={e => setFilterLang(e.target.value)} style={{ width: "100%", padding: "6px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.text, fontSize: 12, outline: "none" }}>
-                <option value="All">All Languages</option>
-                <option value="TypeScript">TypeScript</option>
-                <option value="React">React</option>
-                <option value="SQL">SQL</option>
-                <option value="HTTP">HTTP</option>
-                <option value="Go">Go</option>
-                <option value="Mixed">Mixed</option>
-              </select>
-            </div>
-
-            <div>
-              <div style={{ marginBottom: 4, fontSize: 11, color: T.dim }}>Relationship Type</div>
-              <select aria-label="Filter by Relationship Type" value={filterRel} onChange={e => setFilterRel(e.target.value)} style={{ width: "100%", padding: "6px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.text, fontSize: 12, outline: "none" }}>
-                <option value="All">All Relationships</option>
-                <option value="contains">Contains</option>
-                <option value="imports">Imports</option>
-                <option value="calls">Calls</option>
-                <option value="defines">Defines</option>
-                <option value="extends">Extends</option>
-                <option value="implements">Implements</option>
-                <option value="uses">Uses</option>
-                <option value="depends on">Depends On</option>
-                <option value="exports">Exports</option>
-                <option value="references">References</option>
-              </select>
-            </div>
-
-            <div>
-              <div style={{ marginBottom: 4, fontSize: 11, color: T.dim }}>Visibility</div>
-              <select aria-label="Filter by Visibility" value={filterVis} onChange={e => setFilterVis(e.target.value)} style={{ width: "100%", padding: "6px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, color: T.text, fontSize: 12, outline: "none" }}>
-                <option value="All">All Visibility</option>
-                <option value="Public">Public</option>
-                <option value="Private">Private</option>
-              </select>
-            </div>
-
-          </div>
-
-          <div style={{ padding: 16, flex: 1, overflowY: "auto" }}>
-            <h3 style={{ fontSize: 12, fontWeight: 500, color: T.dim, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Legend</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <LegendItem label="Repository" color={T.accent} />
-              <LegendItem label="Folder / File" color={T.border} />
-              <LegendItem label="Module / API" color={T.info} />
-              <LegendItem label="Class" color={T.warning} />
-              <LegendItem label="Function" color={T.success} />
-              <LegendItem label="Database" color={T.error} />
-              <LegendItem label="Package" color="#a371f7" />
-              <LegendItem label="Interface" color="#71f7a3" />
-              <LegendItem label="Service" color="#f771a3" />
-            </div>
-            
-            <h3 style={{ fontSize: 12, fontWeight: 500, color: T.dim, marginTop: 24, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Edges</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <LegendEdge label="contains / defines" color={T.dim} type="solid" />
-              <LegendEdge label="imports" color={T.warning} type="dashed" />
-              <LegendEdge label="calls" color={T.info} type="solid" />
-              <LegendEdge label="depends on" color={T.error} type="dashed" />
-              <LegendEdge label="uses" color={T.accentBright} type="solid" />
-              <LegendEdge label="exports" color="#a371f7" type="solid" />
-              <LegendEdge label="implements" color={T.success} type="dashed" />
-              <LegendEdge label="extends" color="#71f7a3" type="dashed" />
-              <LegendEdge label="references" color="#f771a3" type="dashed" />
-            </div>
-          </div>
+          <GraphFilters
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            filterType={filterType}
+            setFilterType={setFilterType}
+            filterLang={filterLang}
+            setFilterLang={setFilterLang}
+            filterFolder={filterFolder}
+            setFilterFolder={setFilterFolder}
+            filterRel={filterRel}
+            setFilterRel={setFilterRel}
+            filterVis={filterVis}
+            setFilterVis={setFilterVis}
+            folderOptions={folderOptions}
+          />
+          <GraphLegend />
         </div>
 
         {/* Center Canvas */}
-        <div style={{ flex: 1, position: "relative", background: T.bg }}>
-          {/* Graph Toolbar Overlay */}
-          <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, display: "flex", gap: 8, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: "6px 8px", boxShadow: T.shadow }}>
-            <button aria-label="Toggle Labels" onClick={() => setShowLabels(!showLabels)} style={{ padding: "4px 8px", background: "none", color: showLabels ? T.text : T.dim, border: "none", cursor: "pointer", fontSize: 12 }}>
-              {showLabels ? "Hide Labels" : "Show Labels"}
-            </button>
-            <div style={{ width: 1, background: T.border }}></div>
-            <button aria-label="Reset Graph" onClick={() => { setSearchTerm(""); setFilterType("All"); setFilterLang("All"); setFilterRel("All"); setFilterVis("All"); setSelectedNodeId(null); }} style={{ padding: "4px 8px", background: "none", color: T.text, border: "none", cursor: "pointer", fontSize: 12 }}>
-              Reset Graph
-            </button>
-            <div style={{ width: 1, background: T.border }}></div>
-            <button aria-label="Center Graph" onClick={() => fitView({ duration: 800, padding: 0.2 })} style={{ padding: "4px 8px", background: "none", color: T.text, border: "none", cursor: "pointer", fontSize: 12 }} title="Refocus the graph">
-              Center (Fit View)
-            </button>
-            <div style={{ width: 1, background: T.border }}></div>
-            <button aria-label="Export Image" onClick={() => alert("Exporting image placeholder")} style={{ padding: "4px 8px", background: "none", color: T.text, border: "none", cursor: "pointer", fontSize: 12 }}>
-              Export SVG
-            </button>
-          </div>
-
-          <ReactFlow
+        <div style={{ minWidth: 0, position: "relative", background: T.bg }}>
+          <GraphToolbar
+            showLabels={showLabels}
+            setShowLabels={setShowLabels}
+            resetGraph={() => { setSearchTerm(""); setFilterType("All"); setFilterLang("All"); setFilterFolder("All"); setFilterRel("All"); setFilterVis("All"); setSelectedNodeId(null); }}
+            centerGraph={() => fitView({ duration: 800, padding: 0.2 })}
+          />
+          <GraphCanvas
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
-            nodeTypes={nodeTypes}
-            fitView
-            attributionPosition="bottom-right"
-            theme="dark"
-          >
-            <Background color={T.border} gap={20} size={1} />
-            <Controls style={{ display: 'flex', flexDirection: 'column', backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, overflow: 'hidden' }} />
-            <MiniMap 
-              nodeColor={n => {
-                if(n.data.type==='Class') return T.warning;
-                if(n.data.type==='Function') return T.success;
-                if(n.data.type==='Package') return "#a371f7";
-                return T.surfaceEl;
-              }}
-              style={{ backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6 }}
-              maskColor="rgba(0,0,0,0.5)"
-            />
-          </ReactFlow>
+          />
         </div>
 
         {/* Right Sidebar */}
-        <div style={{ width: 300, borderLeft: `1px solid ${T.border}`, background: T.surface, display: "flex", flexDirection: "column", overflowY: "auto" }}>
-          {selectedNode ? (
-            <div style={{ padding: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-                <div style={{ width: 32, height: 32, borderRadius: T.r6, background: T.surfaceEl, display: "flex", alignItems: "center", justifyContent: "center", color: T.text }}>
-                  <Icons.file size={16} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: T.text, fontFamily: T.mono }}>{selectedNode.data.label}</div>
-                  <div style={{ fontSize: 11, color: T.dim }}>{selectedNode.data.type} &middot; {selectedNode.data.lang}</div>
-                </div>
-              </div>
-              
-              <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-                <DashButton icon={Icons.search} label="Open File" variant="secondary" onClick={() => {}} style={{ flex: 1 }} />
-                <DashButton icon={Icons.arch} label="Analysis" variant="secondary" onClick={() => {}} style={{ flex: 1 }} />
-              </div>
-
-              <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>Metadata</div>
-              <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 12, marginBottom: 24, fontSize: 12, color: T.text }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span style={{ color: T.faint }}>Path</span>
-                  <span style={{ fontFamily: T.mono, color: T.dim }}>{selectedNode.data.path}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span style={{ color: T.faint }}>Visibility</span>
-                  <span style={{ color: selectedNode.data.visibility === 'Public' ? T.success : T.warning }}>{selectedNode.data.visibility}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: T.faint }}>Parent</span>
-                  <span style={{ fontFamily: T.mono, color: T.dim }}>{selectedNode.data.parent || 'none'}</span>
-                </div>
-              </div>
-
-              {/* Children Nodes (if any) */}
-              {(() => {
-                const children = graphMockData.nodes.filter(n => n.data.parent === selectedNode.id);
-                if (children.length === 0) return null;
-                return (
-                  <>
-                    <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>Children ({children.length})</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 24 }}>
-                      {children.map(c => (
-                        <div key={c.id} style={{ fontSize: 12, fontFamily: T.mono, color: T.text, padding: "4px 8px", background: T.surfaceEl, borderRadius: T.r4 }}>
-                          {c.data.label} <span style={{color: T.faint, fontSize: 10}}>({c.data.type})</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                );
-              })()}
-
-              <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>Incoming Relationships</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
-                {edges.filter(e => e.target === selectedNode.id).map(e => {
-                  const otherNode = nodes.find(n => n.id === e.source);
-                  if(!otherNode) return null;
-                  return (
-                    <div key={e.id} style={{ background: T.surfaceEl, borderRadius: T.r4, padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ fontSize: 11, color: T.warning }}>Incoming</div>
-                      <div style={{ fontSize: 12, fontFamily: T.mono, color: T.text }}>
-                        {otherNode.data.label} <span style={{color: T.dim}}>({e.label})</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div style={{ fontSize: 12, color: T.dim, marginBottom: 8, textTransform: "uppercase" }}>Outgoing Relationships</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {edges.filter(e => e.source === selectedNode.id).map(e => {
-                  const otherNode = nodes.find(n => n.id === e.target);
-                  if(!otherNode) return null;
-                  return (
-                    <div key={e.id} style={{ background: T.surfaceEl, borderRadius: T.r4, padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ fontSize: 11, color: T.info }}>Outgoing</div>
-                      <div style={{ fontSize: 12, fontFamily: T.mono, color: T.text }}>
-                        <span style={{color: T.dim}}>({e.label})</span> {otherNode.data.label}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div style={{ padding: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: T.text, marginBottom: 16 }}>Graph Statistics</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-                <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 12 }}>
-                  <div style={{ fontSize: 20, color: T.text, fontFamily: T.mono }}>{graphMockData.nodes.length}</div>
-                  <div style={{ fontSize: 11, color: T.dim }}>Total Nodes</div>
-                </div>
-                <div style={{ background: T.surfaceEl, borderRadius: T.r6, padding: 12 }}>
-                  <div style={{ fontSize: 20, color: T.text, fontFamily: T.mono }}>{graphMockData.edges.length}</div>
-                  <div style={{ fontSize: 11, color: T.dim }}>Total Edges</div>
-                </div>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <StatRow label="Functions" val={graphMockData.nodes.filter(n => n.data.type === 'Function').length} />
-                <StatRow label="Classes" val={graphMockData.nodes.filter(n => n.data.type === 'Class').length} />
-                <StatRow label="Modules" val={graphMockData.nodes.filter(n => n.data.type === 'Module').length} />
-                <StatRow label="Files" val={graphMockData.nodes.filter(n => n.data.type === 'File').length} />
-                <StatRow label="Packages" val={graphMockData.nodes.filter(n => n.data.type === 'Package').length} />
-                <StatRow label="Avg Connections" val={(graphMockData.edges.length / graphMockData.nodes.length).toFixed(1)} />
-                <StatRow label="Graph Density" val="0.14" />
-              </div>
-              <div style={{ marginTop: 40, textAlign: "center", color: T.faint, fontSize: 13, padding: 20 }}>
-                Select a node in the graph to view its details and relationships.
-              </div>
-            </div>
-          )}
+        <div style={{ width: 320, borderLeft: `1px solid ${T.border}`, background: T.surface, display: "flex", flexDirection: "column", overflowY: "auto" }}>
+          {selectedNode
+            ? <KnowledgeNodeInspector selectedNode={selectedNode} edges={edges} nodes={nodes} setActivePage={setActivePage} />
+            : <KnowledgeStatisticsPanel />}
         </div>
       </div>
     </div>
@@ -3802,7 +3900,7 @@ const LegendItem = ({ label, color }) => (
 
 const LegendEdge = ({ label, color, type }) => (
   <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: T.dim }}>
-    <div style={{ width: 24, height: 2, background: type === 'solid' ? color : 'transparent', borderBottom: type === 'dashed' ? `2px dashed ${color}` : 'none' }}></div>
+    <div style={{ width: 24, height: 2, background: type === 'solid' ? color : 'transparent', borderBottom: type === 'dashed' ? `2px dashed ${color}` : type === 'dotted' ? `2px dotted ${color}` : 'none' }}></div>
     {label}
   </div>
 );
@@ -3817,10 +3915,30 @@ const StatRow = ({ label, val }) => (
 /* ─── KNOWLEDGE GRAPH STATES ─────────────────────────────────────────────── */
 function GraphLoadingState() {
   return (
-    <div style={{ padding: "40px", maxWidth: 600, margin: "0 auto", textAlign: "center" }}>
-      <div style={{ width: 64, height: 64, border: `3px solid ${T.border}`, borderTopColor: T.accent, borderRadius: "50%", margin: "0 auto 24px", animation: "spin 1s linear infinite" }} />
-      <h2 style={{ fontSize: 18, color: T.text, marginBottom: 8 }}>Generating Knowledge Graph...</h2>
-      <p style={{ color: T.dim, fontSize: 14 }}>Extracting entity relationships and building visual nodes.</p>
+    <div className="knowledge-layout" style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 320px", height: "100%", overflow: "hidden" }}>
+      <aside style={{ borderRight: `1px solid ${T.border}`, background: T.surface, padding: 16 }}>
+        <div className="dash-skeleton" style={{ height: 18, width: "48%", marginBottom: 18 }} />
+        {[80, 100, 92, 76, 88].map((w, i) => <div key={i} className="dash-skeleton" style={{ height: 30, width: `${w}%`, marginBottom: 10 }} />)}
+        <div className="dash-skeleton" style={{ height: 18, width: "36%", margin: "28px 0 14px" }} />
+        {[65, 72, 58, 80, 66].map((w, i) => <div key={i} className="dash-skeleton" style={{ height: 14, width: `${w}%`, marginBottom: 12 }} />)}
+      </aside>
+      <main style={{ position: "relative", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, backgroundImage: `radial-gradient(${T.border} 1px, transparent 1px)`, backgroundSize: "22px 22px", opacity: 0.8 }} />
+        {[["28%","22%"],["50%","36%"],["68%","24%"],["40%","58%"],["62%","64%"]].map(([left, top], i) => (
+          <div key={i} className="dash-skeleton" style={{ position: "absolute", left, top, width: 118 + i * 8, height: 42, border: `1px solid ${T.border}`, borderRadius: T.r6 }} />
+        ))}
+        <div style={{ position: "relative", width: 360, textAlign: "center", background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r8, padding: 24, boxShadow: T.shadow }}>
+          <div style={{ width: 48, height: 48, border: `3px solid ${T.border}`, borderTopColor: T.accent, borderRadius: "50%", margin: "0 auto 18px", animation: "spin 1s linear infinite" }} />
+          <h2 style={{ fontSize: 18, color: T.text, marginBottom: 8 }}>Generating Knowledge Graph...</h2>
+          <p style={{ color: T.dim, fontSize: 13, marginBottom: 18 }}>Extracting entities, resolving relationships, and preparing graph controls.</p>
+          <ProgressBar value={68} animated />
+        </div>
+      </main>
+      <aside style={{ borderLeft: `1px solid ${T.border}`, background: T.surface, padding: 20 }}>
+        <div className="dash-skeleton" style={{ height: 34, width: "72%", marginBottom: 24 }} />
+        <div className="dash-skeleton" style={{ height: 96, width: "100%", marginBottom: 18 }} />
+        {[100, 88, 94, 76].map((w, i) => <div key={i} className="dash-skeleton" style={{ height: 18, width: `${w}%`, marginBottom: 12 }} />)}
+      </aside>
     </div>
   );
 }
@@ -4162,23 +4280,29 @@ function DependencyTreeItem({ item, depth = 0 }) {
   );
 }
 
+function DependencySearch({ value, onChange }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></div>
+      <input
+        aria-label="Search by function, class, file, module, package, or API"
+        type="text"
+        placeholder="Search function, class, file..."
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ width: "100%", padding: "6px 12px 6px 30px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, fontSize: 13, outline: "none" }}
+      />
+    </div>
+  );
+}
+
 function DependencyFilters({ filters, setFilters }) {
   return (
     <div style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
       <h3 style={{ fontSize: 14, fontWeight: 500, color: T.text, marginBottom: 12 }}>Filters</h3>
       
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ position: "relative" }}>
-          <div style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></div>
-          <input 
-            aria-label="Search function, class, api..."
-            type="text" 
-            placeholder="Search function, class, api..." 
-            value={filters.search}
-            onChange={e => setFilters({...filters, search: e.target.value})}
-            style={{ width: "100%", padding: "6px 12px 6px 30px", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r6, color: T.text, fontSize: 13, outline: "none" }}
-          />
-        </div>
+        <DependencySearch value={filters.search} onChange={search => setFilters({ ...filters, search })} />
 
         <div>
           <div style={{ marginBottom: 4, fontSize: 11, color: T.dim }}>Relationship Type</div>
@@ -4236,6 +4360,26 @@ function DependencyFilters({ filters, setFilters }) {
         </div>
 
       </div>
+    </div>
+  );
+}
+
+function DependencyLegend() {
+  return (
+    <div style={{ position: "absolute", left: 16, bottom: 16, zIndex: 8, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, padding: 12, boxShadow: T.shadow, display: "grid", gap: 8, minWidth: 190 }}>
+      <div style={{ fontSize: 11, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em" }}>Legend</div>
+      {[
+        ["Repository / Folder", T.accent],
+        ["File / Module / Package", T.info],
+        ["Class / Function", T.warning],
+        ["Service / API", "#f771a3"],
+        ["Data / Config / Env", T.error],
+      ].map(([label, color]) => (
+        <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
+          <span style={{ fontSize: 11, color: T.dim }}>{label}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -4395,7 +4539,7 @@ function StatisticsPanel() {
 function DependencyLoadingState() {
   return (
     <div style={{ display: "flex", height: "100%", flexDirection: "column" }}>
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      <div className="dependency-layout" style={{ display: "grid", gridTemplateColumns: "280px minmax(0, 1fr) 340px", flex: 1, overflow: "hidden" }}>
         <div style={{ width: 280, borderRight: `1px solid ${T.border}`, background: T.surface, padding: 16 }}>
           <div className="skeleton-pulse" style={{ height: 24, width: "60%", background: T.surfaceEl, borderRadius: T.r4, marginBottom: 24 }} />
           {[1,2,3,4,5].map(i => <div key={i} className="skeleton-pulse" style={{ height: 16, width: `${90 - i*10}%`, background: T.surfaceEl, borderRadius: T.r4, marginBottom: 12, marginLeft: i*10 }} />)}
@@ -4416,12 +4560,78 @@ function DependencyLoadingState() {
 
 /* ─── MAIN COMPONENT ─── */
 
+function LoadingSkeleton() {
+  return <DependencyLoadingState />;
+}
+
+function EmptyState({ onRun, onRefresh }) {
+  return (
+    <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 40, textAlign: "center" }}>
+      <div style={{ maxWidth: 520 }}>
+        <div style={{ width: 64, height: 64, background: T.surfaceEl, borderRadius: T.r8, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", color: T.faint }}>
+          <Icons.deps size={24} />
+        </div>
+        <h2 style={{ fontSize: 18, color: T.text, marginBottom: 12 }}>No dependency data available.</h2>
+        <p style={{ color: T.dim, fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>
+          Run repository analysis to index imports, calls, references, and downstream dependency paths before inspecting blast radius.
+        </p>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+          <DashButton icon={Icons.arch} label="Run Analysis" variant="primary" onClick={onRun} />
+          <DashButton icon={Icons.upload} label="Refresh" variant="secondary" onClick={onRefresh} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ErrorState({ onRetry }) {
+  return (
+    <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 40, textAlign: "center" }}>
+      <div style={{ maxWidth: 520 }}>
+        <div style={{ width: 64, height: 64, background: "rgba(248,81,73,0.1)", borderRadius: T.r8, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", color: T.error }}>
+          <Icons.error size={24} />
+        </div>
+        <h2 style={{ fontSize: 18, color: T.text, marginBottom: 12 }}>Unable to load dependency graph.</h2>
+        <p style={{ color: T.dim, fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>
+          The dependency index may be stale or the graph service may have failed while resolving deep import and call paths. Retry after refreshing the analysis data.
+        </p>
+        <DashButton icon={Icons.upload} label="Retry" variant="primary" onClick={onRetry} />
+      </div>
+    </div>
+  );
+}
+
+function DependencyGraph({ nodes, edges, onNodesChange, onEdgesChange, onNodeClick, onPaneClick }) {
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onNodeClick={onNodeClick}
+      onPaneClick={onPaneClick}
+      nodeTypes={depNodeTypes}
+      fitView
+      attributionPosition="bottom-right"
+      theme="dark"
+    >
+      <Background color={T.border} gap={20} size={1} />
+      <Controls style={{ display: 'flex', flexDirection: 'column', backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, overflow: 'hidden' }} />
+      <MiniMap
+        nodeColor={n => n.data.risk === 'Critical' ? T.error : n.data.risk === 'High' ? T.warning : T.surfaceEl}
+        style={{ backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6 }}
+        maskColor="rgba(0,0,0,0.5)"
+      />
+    </ReactFlow>
+  );
+}
+
 function DependencyIntelligencePage({ setActivePage }) {
   const [status, setStatus] = useState("success"); // loading, success, error, empty
   
-  if (status === "loading") return <DependencyLoadingState />;
-  if (status === "empty") return <GraphEmptyState onRun={() => setStatus("running")} />;
-  if (status === "error") return <GraphErrorState onRetry={() => setStatus("success")} />;
+  if (status === "loading" || status === "running") return <LoadingSkeleton />;
+  if (status === "empty") return <EmptyState onRun={() => setStatus("running")} onRefresh={() => setStatus("success")} />;
+  if (status === "error") return <ErrorState onRetry={() => setStatus("success")} />;
 
   return (
     <ReactFlowProvider>
@@ -4494,7 +4704,7 @@ function DependencyIntelligenceInner() {
         </div>
 
         {/* Center Canvas */}
-        <div style={{ flex: 1, position: "relative", background: T.bg }}>
+        <div style={{ minWidth: 0, position: "relative", background: T.bg }}>
           <DependencyToolbar 
             showLabels={showLabels} 
             setShowLabels={setShowLabels} 
@@ -4502,30 +4712,19 @@ function DependencyIntelligenceInner() {
             fitView={() => fitView({ duration: 800, padding: 0.2 })} 
           />
 
-          <ReactFlow
+          <DependencyGraph
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
-            nodeTypes={depNodeTypes}
-            fitView
-            attributionPosition="bottom-right"
-            theme="dark"
-          >
-            <Background color={T.border} gap={20} size={1} />
-            <Controls style={{ display: 'flex', flexDirection: 'column', backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6, overflow: 'hidden' }} />
-            <MiniMap 
-              nodeColor={n => n.data.risk === 'Critical' ? T.error : n.data.risk === 'High' ? T.warning : T.surfaceEl}
-              style={{ backgroundColor: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r6 }}
-              maskColor="rgba(0,0,0,0.5)"
-            />
-          </ReactFlow>
+          />
+          <DependencyLegend />
         </div>
 
         {/* Right Sidebar - Inspector Panel */}
-        <div style={{ width: 340, borderLeft: `1px solid ${T.border}`, background: T.surface, display: "flex", flexDirection: "column", overflowY: "auto" }}>
+        <div className="dependency-inspector" style={{ width: 340, borderLeft: `1px solid ${T.border}`, background: T.surface, display: "flex", flexDirection: "column", overflowY: "auto" }}>
           {selectedNode ? <NodeInspector node={selectedNode} edges={edges} nodes={nodes} /> : <StatisticsPanel />}
         </div>
       </div>
