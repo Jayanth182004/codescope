@@ -2464,6 +2464,143 @@ function ExplorerFileRow({ file, onClick, isSelected }) {
   );
 }
 
+function RepositoryBreadcrumb(props) {
+  return <RepoBreadcrumb {...props} />;
+}
+
+function FileRow(props) {
+  return <ExplorerFileRow {...props} />;
+}
+
+function RepositorySearch({ value, onChange, inputRef }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <span style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></span>
+      <input
+        ref={inputRef}
+        aria-label="Search repository files and folders"
+        type="text"
+        placeholder="Search repository..."
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: "100%", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "6px 12px 6px 30px", color: T.text, fontSize: 13, outline: "none" }}
+      />
+    </div>
+  );
+}
+
+function RepositoryFilters({ langFilter, setLangFilter, extFilter, setExtFilter, folderFilter, setFolderFilter, modifiedFilter, setModifiedFilter, sizeFilter, setSizeFilter }) {
+  const selectStyle = { background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 };
+  return (
+    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }} aria-label="Repository filters">
+      <select aria-label="Filter by language" value={langFilter} onChange={(e) => setLangFilter(e.target.value)} style={selectStyle}>
+        <option value="All">Language: All</option>
+        <option value="TypeScript">TypeScript</option>
+        <option value="React">React</option>
+        <option value="HTML">HTML</option>
+        <option value="JSON">JSON</option>
+        <option value="Markdown">Markdown</option>
+      </select>
+      <select aria-label="Filter by extension" value={extFilter} onChange={(e) => setExtFilter(e.target.value)} style={selectStyle}>
+        <option value="All">Extension: All</option>
+        <option value=".ts">.ts</option>
+        <option value=".tsx">.tsx</option>
+        <option value=".html">.html</option>
+        <option value=".json">.json</option>
+        <option value=".md">.md</option>
+      </select>
+      <select aria-label="Filter by folder" value={folderFilter} onChange={(e) => setFolderFilter(e.target.value)} style={selectStyle}>
+        <option value="Current">Folder: Current</option>
+        <option value="All">All Subfolders</option>
+      </select>
+      <select aria-label="Filter by modified date" value={modifiedFilter} onChange={(e) => setModifiedFilter(e.target.value)} style={selectStyle}>
+        <option value="Any">Modified: Any Date</option>
+        <option value="Week">Last Week</option>
+        <option value="Month">Last Month</option>
+      </select>
+      <select aria-label="Filter by file size" value={sizeFilter} onChange={(e) => setSizeFilter(e.target.value)} style={selectStyle}>
+        <option value="Any">Size: Any</option>
+        <option value="Small">Small</option>
+        <option value="Medium">Medium</option>
+        <option value="Large">Large</option>
+      </select>
+    </div>
+  );
+}
+
+function StatisticsCards() {
+  return (
+    <div style={{ borderTop: `1px solid ${T.border}`, padding: 16, fontSize: 12, color: T.dim }}>
+      <div style={{ fontWeight: 600, color: T.text, marginBottom: 8 }}>Repository Statistics</div>
+      {[
+        ["Total Files", "1,248"],
+        ["Total Folders", "142"],
+        ["Repository Size", "24.5 MB"],
+        ["Largest Folder", "/packages/ui"],
+        ["Largest File", "DataGrid.tsx"],
+        ["Languages", "TypeScript, React"],
+      ].map(([label, value]) => (
+        <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, gap: 8 }}>
+          <span>{label}</span>
+          <span style={{ color: T.text, textAlign: "right" }}>{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FileList({ files, selectedFile, onFileClick, onHeaderClick, sortField, sortAsc }) {
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) 1fr 1fr 1fr 1fr 1fr", gap: 16, padding: "12px 16px", borderBottom: `1px solid ${T.borderMid}`, fontSize: 12, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("name")}>Name {sortField === "name" ? (sortAsc ? "▲" : "▼") : "↕"}</button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("name")}>Ext ↕</button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("lang")}>Language {sortField === "lang" ? (sortAsc ? "▲" : "▼") : "↕"}</button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("size")}>Size {sortField === "size" ? (sortAsc ? "▲" : "▼") : "↕"}</button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("date")}>Modified ↕</button>
+        <button style={fileHeaderButtonStyle} onClick={() => onHeaderClick("status")}>Status ↕</button>
+      </div>
+      {files.map(item => (
+        <FileRow key={item.id} file={item} isSelected={selectedFile?.id === item.id} onClick={onFileClick} />
+      ))}
+    </div>
+  );
+}
+
+const fileHeaderButtonStyle = { background: "none", border: "none", color: T.dim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", cursor: "pointer", padding: 0 };
+
+function ExplorerEmptyState({ onRefresh, onUpload }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: T.faint, textAlign: "center" }}>
+      <Icons.file size={48} strokeWidth={1} />
+      <p style={{ marginTop: 16 }}>No files found</p>
+      <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+        <DashButton variant="secondary" onClick={onRefresh}><span style={{fontSize:16}}>â†»</span> Refresh</DashButton>
+        <DashButton variant="primary" onClick={onUpload}>Upload Repository</DashButton>
+      </div>
+    </div>
+  );
+}
+
+function ExplorerErrorState({ onRetry }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "calc(100vh - 60px)" }}>
+      <Icons.error size={48} stroke={T.error} />
+      <h2 style={{ color: T.text, marginTop: 16 }}>Unable to load repository</h2>
+      <p style={{ color: T.dim, marginTop: 8 }}>The repository explorer service is currently unreachable. Check the repository upload and try again.</p>
+      <DashButton variant="primary" style={{ marginTop: 24 }} onClick={onRetry}>Retry</DashButton>
+    </div>
+  );
+}
+
+function ExplorerLoadingSkeleton() {
+  return <ExplorerSkeleton />;
+}
+
+function ExplorerErrorBoundaryState(props) {
+  return <ExplorerErrorState {...props} />;
+}
+
 function FilePreview({ file }) {
   if (!file || file.type === "folder") return (
     <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed ${T.border}`, borderRadius: T.r6, background: T.surfaceEl, color: T.faint, fontSize: 13 }}>
@@ -2486,6 +2623,64 @@ function FilePreview({ file }) {
           {"  "});<br/>
           {"}"}
         </pre>
+      </div>
+    </div>
+  );
+}
+
+function FileDetailsPanel({ selectedFile, folderPath, setActivePage }) {
+  if (!selectedFile) {
+    return (
+      <div style={{ padding: 24, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: T.faint, textAlign: "center" }}>
+        <Icons.file size={48} strokeWidth={1} />
+        <p style={{ marginTop: 16, fontSize: 14 }}>Select a file to view details and preview.</p>
+      </div>
+    );
+  }
+
+  const fullPath = `${folderPath.map(f => f.name).join(" / ")} / ${selectedFile.name}`;
+  const copyPath = () => navigator?.clipboard?.writeText?.(fullPath);
+
+  return (
+    <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 24 }}>
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <span style={{ color: T.info, fontSize: 24 }}>ðŸ“„</span>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: T.text, margin: 0, wordBreak: "break-all" }}>{selectedFile.name}</h2>
+        </div>
+        <div style={{ fontSize: 12, color: T.faint, fontFamily: T.mono }}>{fullPath}</div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <DashButton variant="primary">Open File</DashButton>
+        <DashButton variant="secondary" onClick={copyPath}><Icons.link /> Copy Path</DashButton>
+        <DashButton variant="secondary">Download</DashButton>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13, borderTop: `1px solid ${T.border}`, paddingTop: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Repository</span><span style={{ color: T.text }}>frontend-platform</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Language</span><span style={{ color: T.text }}>{selectedFile.lang}</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Extension</span><span style={{ color: T.text }}>.{selectedFile.name.split('.').pop()}</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Size</span><span style={{ color: T.text }}>{selectedFile.size}</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Created Date</span><span style={{ color: T.text }}>{selectedFile.created}</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Modified Date</span><span style={{ color: T.text }}>{selectedFile.date}</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: T.faint }}>Future Analysis Status</span><span style={{ color: selectedFile.status === "Analyzed" ? T.success : T.warning }}>{selectedFile.status}</span></div>
+      </div>
+
+      <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 20 }}>
+        <h4 style={{ fontSize: 12, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>File Preview</h4>
+        <FilePreview file={selectedFile} />
+      </div>
+      
+      <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 20 }}>
+        <h4 style={{ fontSize: 12, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>Quick Actions</h4>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }} onClick={() => setActivePage('repo-analysis')}>View Analysis</DashButton>
+          <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }} onClick={() => setActivePage('deps')}>View Dependencies</DashButton>
+          <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }} onClick={() => setActivePage('arch')}>View Architecture</DashButton>
+          <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }}>Download</DashButton>
+          <DashButton variant="secondary" style={{ justifyContent: "flex-start", fontSize: 13 }} onClick={copyPath}>Copy Path</DashButton>
+        </div>
       </div>
     </div>
   );
@@ -2520,8 +2715,12 @@ function RepoExplorerPage({ setActivePage }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [langFilter, setLangFilter] = useState("All");
   const [extFilter, setExtFilter] = useState("All");
+  const [folderFilter, setFolderFilter] = useState("Current");
+  const [modifiedFilter, setModifiedFilter] = useState("Any");
+  const [sizeFilter, setSizeFilter] = useState("Any");
   const [sortField, setSortField] = useState("name");
   const [sortAsc, setSortAsc] = useState(true);
+  const explorerSearchRef = useRef(null);
 
   // Flatten tree to find path for breadcrumbs easily (hack for mock)
   const findNode = (nodes, id, path = []) => {
@@ -2537,6 +2736,18 @@ function RepoExplorerPage({ setActivePage }) {
 
   const [currentFolderId, setCurrentFolderId] = useState("root");
   const [selectedFile, setSelectedFile] = useState(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        explorerSearchRef.current?.focus();
+      }
+      if (e.key === "Escape") explorerSearchRef.current?.blur();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const folderPath = findNode(MOCK_FILE_TREE, currentFolderId) || [MOCK_FILE_TREE[0]];
   const currentFolder = folderPath[folderPath.length - 1];
@@ -2575,15 +2786,8 @@ function RepoExplorerPage({ setActivePage }) {
     }
   };
 
-  if (status === "loading") return <ExplorerSkeleton />;
-  if (status === "error") return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "calc(100vh - 60px)" }}>
-      <Icons.error size={48} stroke={T.error} />
-      <h2 style={{ color: T.text, marginTop: 16 }}>Unable to load repository</h2>
-      <p style={{ color: T.dim, marginTop: 8 }}>The repository explorer service is currently unreachable.</p>
-      <DashButton variant="primary" style={{ marginTop: 24 }} onClick={() => setStatus("success")}>Retry</DashButton>
-    </div>
-  );
+  if (status === "loading") return <ExplorerLoadingSkeleton />;
+  if (status === "error") return <ExplorerErrorBoundaryState onRetry={() => setStatus("success")} />;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 320px", height: "calc(100vh - 60px)", borderTop: `1px solid ${T.border}` }}>
@@ -2591,16 +2795,8 @@ function RepoExplorerPage({ setActivePage }) {
       {/* LEFT PANEL: Folder Tree & Stats */}
       <div style={{ background: T.surface, borderRight: `1px solid ${T.border}`, overflowY: "auto", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: 16, borderBottom: `1px solid ${T.border}` }}>
-          <div style={{ position: "relative" }}>
-            <span style={{ position: "absolute", left: 10, top: 8, color: T.faint }}><Icons.search size={14} /></span>
-            <input 
-              type="text" 
-              placeholder="Search repository..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ width: "100%", background: T.surfaceEl, border: `1px solid ${T.border}`, borderRadius: T.r4, padding: "6px 12px 6px 30px", color: T.text, fontSize: 13, outline: "none" }} 
-            />
-          </div>
+          <RepositorySearch value={searchTerm} onChange={setSearchTerm} inputRef={explorerSearchRef} />
+          <div style={{ marginTop: 8, fontSize: 10, color: T.faint, fontFamily: T.mono }}>Ctrl+F to search · Enter to open · Esc to clear focus</div>
         </div>
         <div style={{ padding: "12px 0", flex: 1 }}>
           <FolderTree 
@@ -2609,56 +2805,29 @@ function RepoExplorerPage({ setActivePage }) {
             onSelectFile={(file) => { setSelectedFile(file); }}
           />
         </div>
-        <div style={{ borderTop: `1px solid ${T.border}`, padding: 16, fontSize: 12, color: T.dim }}>
-          <div style={{ fontWeight: 600, color: T.text, marginBottom: 8 }}>Repository Statistics</div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Total Files</span><span>1,248</span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Total Folders</span><span>142</span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Size</span><span>24.5 MB</span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Largest Folder</span><span>/packages/ui</span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Largest File</span><span>DataGrid.tsx (8.5 KB)</span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>Languages</span><span>TypeScript, React</span></div>
-        </div>
+        <StatisticsCards />
       </div>
 
       {/* CENTER PANEL: File List */}
       <div style={{ background: T.bg, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <div style={{ padding: "16px 24px", borderBottom: `1px solid ${T.border}`, display: "flex", flexDirection: "column", gap: 16 }}>
-          <RepoBreadcrumb 
+          <RepositoryBreadcrumb 
             path={[{name: "Northstar Platform", id: "root"}, {name: "frontend-platform", id: "root"}, ...folderPath]} 
             onNavigate={(id) => setCurrentFolderId(id)}
           />
           
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <select 
-              value={langFilter}
-              onChange={(e) => setLangFilter(e.target.value)}
-              style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}
-            >
-              <option value="All">Language: All</option>
-              <option value="TypeScript">TypeScript</option>
-              <option value="React">React</option>
-            </select>
-            <select 
-              value={extFilter}
-              onChange={(e) => setExtFilter(e.target.value)}
-              style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}
-            >
-              <option value="All">Extension: All</option>
-              <option value=".ts">.ts</option>
-              <option value=".tsx">.tsx</option>
-              <option value=".html">.html</option>
-            </select>
-            <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
-              <option>Folder: Current</option>
-              <option>All Subfolders</option>
-            </select>
-            <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
-              <option>Modified: Any Date</option>
-            </select>
-            <select style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, padding: "6px 12px", borderRadius: T.r6, outline: "none", fontSize: 12 }}>
-              <option>Size: Any</option>
-            </select>
-          </div>
+          <RepositoryFilters
+            langFilter={langFilter}
+            setLangFilter={setLangFilter}
+            extFilter={extFilter}
+            setExtFilter={setExtFilter}
+            folderFilter={folderFilter}
+            setFolderFilter={setFolderFilter}
+            modifiedFilter={modifiedFilter}
+            setModifiedFilter={setModifiedFilter}
+            sizeFilter={sizeFilter}
+            setSizeFilter={setSizeFilter}
+          />
         </div>
 
         <div style={{ flex: 1, overflowY: "auto" }}>
