@@ -7,12 +7,14 @@ from app.core.exceptions import APIError
 from app.modules.auth.repository import UserRepository
 from app.modules.auth.models import User
 
-security_scheme = HTTPBearer()
+security_scheme = HTTPBearer(auto_error=False)
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
     db: Session = Depends(get_db)
 ) -> User:
+    if not credentials:
+        raise APIError("Not authenticated", status_code=401)
     token = credentials.credentials
     payload = decode_token(token)
     if not payload:

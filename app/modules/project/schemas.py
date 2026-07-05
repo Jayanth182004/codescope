@@ -4,9 +4,9 @@ from pydantic import BaseModel, ConfigDict
 class ProjectBase(BaseModel):
     name: str
     description: Optional[str] = None
-    icon: Optional[str] = "🌐"
+    icon: Optional[str] = "PR"
     color: Optional[str] = "#3D8B7A"
-    visibility: Optional[str] = "Private" # Private | Internal | Public
+    visibility: Optional[str] = "Private"  # Private | Internal | Public
 
 class ProjectCreate(ProjectBase):
     workspace_id: str
@@ -21,6 +21,7 @@ class ProjectUpdate(BaseModel):
 
 class ProjectOut(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
+
     id: str
     workspace_id: str
     owner: str

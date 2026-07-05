@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from sqlalchemy import Column, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database.session import Base
@@ -13,7 +13,7 @@ class ActivityLog(Base):
     repository_id = Column(String, ForeignKey("repositories.id", ondelete="SET NULL"), nullable=True, index=True)
     action = Column(String, nullable=False) # e.g. "Project Created"
     details = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     
     # Relationships
     user = relationship("User", back_populates="activity_logs")

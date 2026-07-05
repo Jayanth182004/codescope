@@ -60,6 +60,24 @@ def test_auth_workflow(client):
     assert response.status_code == 200
     res_data = response.json()
     assert res_data["success"] is True
+    refresh_token = res_data["data"]["refresh_token"]
+
+    duplicate_response = client.post("/api/v1/auth/register", json=payload)
+    assert duplicate_response.status_code == 400
+
+    refresh_response = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert refresh_response.status_code == 200
+    rotated_refresh_token = refresh_response.json()["data"]["refresh_token"]
+    assert rotated_refresh_token != refresh_token
+
+    reused_response = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert reused_response.status_code == 401
+
+    logout_response = client.post("/api/v1/auth/logout", json={"refresh_token": rotated_refresh_token})
+    assert logout_response.status_code == 200
+
+    logged_out_refresh_response = client.post("/api/v1/auth/refresh", json={"refresh_token": rotated_refresh_token})
+    assert logged_out_refresh_response.status_code == 401
 
     headers = {"Authorization": f"Bearer {access_token}"}
     response = client.get("/api/v1/users/me", headers=headers)

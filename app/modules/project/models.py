@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from app.database.session import Base
@@ -11,12 +11,12 @@ class Project(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     owner = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     repository_count = Column(Integer, default=0)
     health_score = Column(Integer, default=100)
     visibility = Column(String, default="Private") # Private | Internal | Public
     is_archived = Column(Boolean, default=False)
-    icon = Column(String, default="🌐")
+    icon = Column(String, default="PR")
     color = Column(String, default="#3D8B7A")
     
     # Relationships

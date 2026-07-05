@@ -2,14 +2,19 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "test:api": ".\\.venv\\Scripts\\python.exe -m pytest",
+    "check": "npm run build && npm run test:api"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.85.5",
     "@vitejs/plugin-react": "latest",
     "@xyflow/react": "^12.11.1",
+    "axios": "^1.11.0",
     "react": "latest",
     "react-dom": "latest",
-    "vite": "latest"
+    "vite": "latest",
+    "zustand": "^4.5.7"
   },
   "devDependencies": {
     "eslint": "^9.39.4",
