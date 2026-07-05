@@ -13,14 +13,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/License-MIT-brightgreen?style=for-the-badge" alt="License" />
   <img src="https://img.shields.io/badge/Build-Passing-brightgreen?style=for-the-badge" alt="Build" />
   <img src="https://img.shields.io/badge/Maintained%3F-yes-brightgreen.svg?style=for-the-badge" alt="Maintained" />
 </p>
 
 ---
-
-<img src="docs/preview.png" alt="CodeScope Dashboard UI" width="100%" style="border-radius: 10px; box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);" />
 
 <br/>
 <br/>
